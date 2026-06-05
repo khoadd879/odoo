@@ -2,9 +2,9 @@ FROM odoo:18.0
 
 USER root
 
-# Ensure git, gosu, and envsubst are available
+# Ensure git and envsubst are available
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates gosu gettext-base \
+    && apt-get install -y --no-install-recommends git ca-certificates gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps

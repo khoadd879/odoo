@@ -56,10 +56,10 @@ done
 
 echo "[entrypoint] Substituting env vars in odoo.conf..."
 envsubst < /etc/odoo/odoo.conf > /tmp/odoo.conf.rendered
-chown odoo:odoo /tmp/odoo.conf.rendered
+chmod 0644 /tmp/odoo.conf.rendered
 
 # Override ODOO_RC (set by base image) so odoo uses the rendered config
 export ODOO_RC=/tmp/odoo.conf.rendered
 
-echo "[entrypoint] Starting Odoo as odoo user..."
-exec gosu odoo odoo -c /tmp/odoo.conf.rendered
+echo "[entrypoint] Starting Odoo as root (dev only — see docker-compose user: '0:0')..."
+exec odoo -c /tmp/odoo.conf.rendered
