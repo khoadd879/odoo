@@ -1,0 +1,1 @@
+# Pin custom Python deps here; leave empty for vanilla Odoo 18.0
