@@ -20,6 +20,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: odoo_app
+    # Run as root so entrypoint can write to host-mounted ./addons and ./odoo-data
+    # (dev only — production should use proper uid mapping)
+    user: '0:0'
     depends_on:
       db:
         condition: service_healthy

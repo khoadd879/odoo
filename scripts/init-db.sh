@@ -22,7 +22,11 @@ if [[ "${EXISTS}" == "1" ]]; then
 fi
 
 echo "Creating database '${DB_NAME}'..."
-docker compose run --rm odoo odoo -c /etc/odoo/odoo.conf -d "${DB_NAME}" --init base --stop-after-init
+# Bypass entrypoint; render odoo.conf with envsubst, then init base
+docker compose run --rm \
+  --entrypoint "sh" \
+  odoo \
+  -c "envsubst < /etc/odoo/odoo.conf > /tmp/odoo.conf && unset ODOO_RC && odoo -c /tmp/odoo.conf -d ${DB_NAME} --init base --stop-after-init"
 
 echo "Done. Open http://localhost:8069/web/database/manager to create a fresh DB"
 echo "or to start the stack: docker compose up -d"

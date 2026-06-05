@@ -2,14 +2,14 @@ FROM odoo:18.0
 
 USER root
 
-# Ensure git is available for OCA cloning
+# Ensure git, gosu, and envsubst are available
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates gosu gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 
 # Copy Odoo config and entrypoint
 COPY odoo.conf /etc/odoo/odoo.conf
@@ -21,7 +21,7 @@ RUN chmod +x /entrypoint.sh \
 RUN mkdir -p /var/lib/odoo \
     && chown -R odoo:odoo /var/lib/odoo
 
-USER odoo
+USER root
 
 EXPOSE 8069 8072
 
