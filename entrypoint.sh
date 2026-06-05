@@ -7,6 +7,9 @@ CUSTOM_ROOT="${ADDONS_ROOT}/custom"
 
 mkdir -p "${OCA_ROOT}" "${CUSTOM_ROOT}"
 
+# Mark all OCA repos as safe (host-mounted dirs may have mismatched ownership)
+git config --global --add safe.directory '*'
+
 # Mapping: short name → GitHub repo
 declare -A OCA_REPOS=(
   ["web"]="web"
@@ -20,7 +23,9 @@ declare -A OCA_REPOS=(
   ["server-tools"]="server-tools"
 )
 
-# env var name per short name (uppercase, dashes → underscores)
+# env var name per short name: uppercase, dashes → underscores
+# e.g. "e-commerce" → "OCA_E_COMMERCE_COMMIT" (matches OCA_E_COMMERCE_COMMIT in .env)
+#      "sale-workflow" → "OCA_SALE_WORKFLOW_COMMIT"
 env_for() {
   echo "OCA_$(echo "$1" | tr '[:lower:]-' '[:upper:]_')_COMMIT"
 }
@@ -38,11 +43,16 @@ for short in "${!OCA_REPOS[@]}"; do
 
   if [[ ! -d "${target}" ]]; then
     echo "[entrypoint] Cloning OCA/${repo} (branch 18.0, sha ${sha})"
-    git clone --branch 18.0 --depth 1 "https://github.com/OCA/${repo}.git" "${target}"
-    (cd "${target}" && git fetch --depth 1 origin "${sha}" && git checkout "${sha}")
+    git clone --branch 18.0 --depth 1 "https://github.com/OCA/${repo}.git" "${target}" || {
+      echo "[entrypoint] WARN: clone failed for OCA/${repo}, continuing"
+      continue
+    }
+    (cd "${target}" && git fetch --depth 1 origin "${sha}" && git checkout "${sha}") || \
+      echo "[entrypoint] WARN: fetch/checkout failed for OCA/${repo}, keeping clone default"
   else
     echo "[entrypoint] Updating OCA/${repo} to sha ${sha}"
-    (cd "${target}" && git fetch --depth 1 origin "${sha}" && git checkout "${sha}")
+    (cd "${target}" && git fetch --depth 1 origin "${sha}" && git checkout "${sha}") || \
+      echo "[entrypoint] WARN: update failed for OCA/${repo}, keeping current checkout"
   fi
 done
 
