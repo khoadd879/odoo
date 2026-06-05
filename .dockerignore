@@ -1,0 +1,9 @@
+.git
+.env
+postgres-data
+odoo-data
+docs/superpowers/plans
+*.md
+!README.md
+__pycache__
+*.pyc
