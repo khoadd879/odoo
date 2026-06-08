@@ -194,8 +194,8 @@ docker compose up -d db
 # 5. Tạo DB odoo_dev
 bash scripts/init-db.sh
 
-# 6. Install 12 core modules + dependencies
-MODULES="website,website_sale,website_blog,website_forum,sale_management,sale,stock,purchase,account_accountant,account,l10n_vn,mass_mailing,mass_mailing_sms"
+# 6. Install core modules + dependencies
+MODULES="website,website_sale,website_blog,website_forum,sale_management,sale,stock,purchase,account,l10n_vn,mass_mailing,mass_mailing_sms"
 bash scripts/cli.sh -d odoo_dev -i ${MODULES} --stop-after-init
 
 # 7. Start full stack
