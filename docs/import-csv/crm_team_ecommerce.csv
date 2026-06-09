@@ -1,0 +1,5 @@
+id,name,sequence,active,use_leads,use_quotations,invoiced_target,company_id/id,user_id/login
+__import__.team_ecom_online,Online Sales,10,True,True,True,500000,base.main_company,ecom.lead@gmail.com
+__import__.team_ecom_marketplace,Marketplace,20,True,True,True,300000,base.main_company,ecom.sales1@gmail.com
+__import__.team_ecom_b2b,B2B Direct,30,True,True,True,800000,base.main_company,ecom.sales2@gmail.com
+__import__.team_ecom_support,Customer Support,40,True,False,False,0,base.main_company,ecom.cskh@gmail.com

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_product_note_list" model="ir.ui.view">
+        <field name="name">product.note.list</field>
+        <field name="model">product.note</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="product_id"/>
+                <field name="author_id"/>
+                <field name="priority"/>
+                <field name="create_date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_product_note_form" model="ir.ui.view">
+        <field name="name">product.note.form</field>
+        <field name="model">product.note</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <field name="priority" widget="priority"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="product_id"/>
+                        <field name="author_id"/>
+                    </group>
+                    <field name="body" placeholder="Write your note here..."/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_product_note_search" model="ir.ui.view">
+        <field name="name">product.note.search</field>
+        <field name="model">product.note</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="product_id"/>
+                <field name="author_id"/>
+                <filter string="High Priority" name="filter_high" domain="[('priority', '=', '2')]"/>
+                <filter string="My Notes" name="filter_mine" domain="[('author_id', '=', uid)]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Product" name="group_product" context="{'group_by': 'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_product_note" model="ir.actions.act_window">
+        <field name="name">Product Notes</field>
+        <field name="res_model">product.note</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No notes yet. Create your first product note!
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_product_note_root"
+              name="Product Notes"
+              action="action_product_note"
+              parent="stock.menu_product_in_config_stock"
+              sequence="50"/>
+
+</odoo>

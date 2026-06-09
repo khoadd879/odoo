@@ -1,0 +1,6 @@
+id,crm_team_id/id,user_id/login
+__import__.member_ecom_admin_team_lead,__import__.team_ecom_online,ecom.lead@gmail.com
+__import__.member_ecom_sales1_online,__import__.team_ecom_online,ecom.sales1@gmail.com
+__import__.member_ecom_sales2_b2b,__import__.team_ecom_b2b,ecom.sales2@gmail.com
+__import__.member_ecom_sales1_market,__import__.team_ecom_marketplace,ecom.sales1@gmail.com
+__import__.member_ecom_cskh_support,__import__.team_ecom_support,ecom.cskh@gmail.com

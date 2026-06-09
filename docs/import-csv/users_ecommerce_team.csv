@@ -1,0 +1,9 @@
+id,name,login,email,active,company_id/id,groups_id/id
+__import__.ecom_sales_lead,Ecom Sales Lead,ecom.lead@gmail.com,ecom.lead@gmail.com,True,base.main_company,sales_team.group_sale_manager
+__import__.ecom_sales_1,Ecom Sales 1,ecom.sales1@gmail.com,ecom.sales1@gmail.com,True,base.main_company,sales_team.group_sale_salesman_all_leads
+__import__.ecom_sales_2,Ecom Sales 2,ecom.sales2@gmail.com,ecom.sales2@gmail.com,True,base.main_company,sales_team.group_sale_salesman_all_leads
+__import__.ecom_wh_manager,Ecom Warehouse Manager,ecom.whmanager@gmail.com,ecom.whmanager@gmail.com,True,base.main_company,stock.group_stock_manager
+__import__.ecom_wh_staff,Ecom Warehouse Staff,ecom.whstaff@gmail.com,ecom.whstaff@gmail.com,True,base.main_company,stock.group_stock_user
+__import__.ecom_accountant,Ecom Accountant,ecom.accountant@gmail.com,ecom.accountant@gmail.com,True,base.main_company,account.group_account_invoice
+__import__.ecom_buyer,Ecom Buyer,ecom.buyer@gmail.com,ecom.buyer@gmail.com,True,base.main_company,purchase.group_purchase_user
+__import__.ecom_marketing,Ecom Marketing,ecom.marketing@gmail.com,ecom.marketing@gmail.com,True,base.main_company,mass_mailing.group_mass_mailing_user

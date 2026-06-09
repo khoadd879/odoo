@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16
-    container_name: odoo_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-odoo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -14,6 +13,8 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - default
 
   odoo:
     build:
@@ -40,6 +41,12 @@ services:
       - "${ODOO_HTTP_PORT:-8069}:8069"
       - "${ODOO_LONGPOLLING_PORT:-8072}:8072"
     restart: unless-stopped
+    networks:
+      - default
 
 volumes:
   postgres-data:
+
+networks:
+  default:
+    driver: bridge
