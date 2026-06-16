@@ -27,6 +27,7 @@
         "data/product_category_data.xml",
         "data/product_data.xml",
         "data/product_pricelist_data.xml",
+        "data/sample_bl_scans.xml",
         "data/crm_team_data.xml",
         "data/res_users_data.xml",
         "data/crm_stages.xml",
@@ -41,6 +42,7 @@
         "views/menu_views.xml",
         "views/onboarding_form.xml",
         "views/website_branding.xml",
+        "wizards/crm_lead_onboarding_wizard_view.xml",
     ],
     "assets": {
         "web.assets_backend": [
