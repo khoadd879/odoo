@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="branch_lae" model="steamships.branch">
+            <field name="name">Lae (Morobe)</field>
+            <field name="code">LAE</field>
+            <field name="division_id" ref="division_logistics"/>
+            <field name="address">Steamships Compound, Markham Rd, Lae, Morobe Province</field>
+            <field name="phone">+675 472 2344</field>
+        </record>
+        <record id="branch_motukea" model="steamships.branch">
+            <field name="name">Motukea Container Depot</field>
+            <field name="code">MOTK</field>
+            <field name="division_id" ref="division_logistics"/>
+            <field name="address">Motukea Island, Central Province</field>
+            <field name="phone">+675 321 1234</field>
+        </record>
+        <record id="branch_pom" model="steamships.branch">
+            <field name="name">Port Moresby HQ</field>
+            <field name="code">POM</field>
+            <field name="division_id" ref="division_shipping"/>
+            <field name="address">Champion Parade, Port Moresby, NCD</field>
+            <field name="phone">+675 322 0800</field>
+        </record>
+        <record id="branch_daru" model="steamships.branch">
+            <field name="name">Daru (Western)</field>
+            <field name="code">DARU</field>
+            <field name="division_id" ref="division_shipping"/>
+            <field name="address">Daru, Western Province</field>
+        </record>
+    </data>
+</odoo>

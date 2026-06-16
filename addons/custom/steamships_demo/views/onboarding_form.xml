@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- ================== Onboarding form (Bước 4: full polish) ================== -->
+        <template id="onboarding_page" name="Steamships Onboarding Form">
+            <t t-call="website.layout">
+                <head>
+                    <!-- Steamships branding: PNG flag colors (red/black/yellow) + custom CSS -->
+                    <style>
+                        :root {
+                            --ss-red: #CE1126;
+                            --ss-black: #000000;
+                            --ss-yellow: #FCD116;
+                            --ss-purple: #714B67;
+                            --ss-bg: #f7f7f9;
+                            --ss-text: #222;
+                            --ss-muted: #666;
+                        }
+                        body { background: var(--ss-bg); }
+                        .o_onb_hero {
+                            background: linear-gradient(135deg, var(--ss-red) 0%, var(--ss-black) 50%, var(--ss-yellow) 100%);
+                            color: white; padding: 32px 24px; border-radius: 8px;
+                            margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,.1);
+                        }
+                        .o_onb_hero h1 { color: white; font-weight: 700; margin: 0 0 8px; }
+                        .o_onb_hero p { color: rgba(255,255,255,.9); margin: 0; font-size: 1.1rem; }
+                        .o_onb_form { background: white; padding: 32px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+                        .o_onb_form fieldset { border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px 24px; margin-bottom: 20px; }
+                        .o_onb_form legend { font-size: 1.1rem; font-weight: 600; color: var(--ss-purple); padding: 0 12px; width: auto; }
+                        .o_onb_form label { font-weight: 500; color: var(--ss-text); margin-bottom: 4px; }
+                        .o_onb_form label.required:after { content: " *"; color: var(--ss-red); }
+                        .o_onb_form .form-control, .o_onb_form .form-select {
+                            border: 1px solid #d0d0d0; border-radius: 4px; padding: 8px 12px;
+                        }
+                        .o_onb_form .form-control:focus, .o_onb_form .form-select:focus {
+                            border-color: var(--ss-purple); box-shadow: 0 0 0 2px rgba(113,75,103,.15);
+                        }
+                        .o_onb_submit { background: var(--ss-purple); border: 0; padding: 12px 32px; font-size: 1.05rem; font-weight: 600; }
+                        .o_onb_submit:hover { background: #5a3b52; }
+                        .o_onb_optional { color: var(--ss-muted); font-size: .85em; font-weight: normal; }
+                        .o_onb_error { border-left: 4px solid var(--ss-red); }
+                        .o_onb_progress { height: 4px; background: #e0e0e0; border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
+                        .o_onb_progress_bar { height: 100%; background: var(--ss-purple); width: 0; transition: width .3s; }
+                        .o_onb_logo { font-size: 1.5rem; font-weight: 700; }
+                        .o_onb_logo .red { color: var(--ss-red); }
+                        .o_onb_logo .black { color: var(--ss-black); }
+                        .o_onb_logo .yellow { color: var(--ss-yellow); }
+                    </style>
+                </head>
+
+                <div id="wrap" class="container my-4" style="max-width: 800px;">
+                    <!-- Hero -->
+                    <div class="o_onb_hero">
+                        <div class="o_onb_logo">
+                            <span class="red">S</span><span class="black">teamships</span><span class="yellow">.</span>
+                        </div>
+                        <h1>Client Onboarding</h1>
+                        <p>One form. Nothing gets lost. Our team will respond within 24 hours.</p>
+                    </div>
+
+                    <!-- Progress bar (decorative, filled by JS) -->
+                    <div class="o_onb_progress" aria-label="Form progress">
+                        <div class="o_onb_progress_bar" id="o_onb_progress_bar"/>
+                    </div>
+
+                    <!-- Error block -->
+                    <div t-if="error" class="alert alert-danger o_onb_error">
+                        <strong>Please correct the following:</strong> <t t-esc="error"/>
+                    </div>
+
+                    <!-- Form -->
+                    <form action="/onboarding/submit" method="post"
+                          enctype="multipart/form-data"
+                          class="o_onb_form" id="o_onb_form"
+                          novalidate="true">
+
+                        <fieldset>
+                            <legend>Company Information</legend>
+
+                            <div class="mb-3">
+                                <label for="company_name" class="form-label required">Company name</label>
+                                <input type="text" name="company_name" id="company_name"
+                                       class="form-control" required="required"
+                                       t-att-value="values.get('company_name', '')"
+                                       placeholder="e.g. Acme Mining Ltd"/>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contact_person" class="form-label required">Contact person</label>
+                                <input type="text" name="contact_person" id="contact_person"
+                                       class="form-control" required="required"
+                                       t-att-value="values.get('contact_person', '')"
+                                       placeholder="Full name"/>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="email" class="form-label required">Email</label>
+                                    <input type="email" name="email" id="email"
+                                           class="form-control" required="required"
+                                           t-att-value="values.get('email', '')"
+                                           placeholder="name@company.com"/>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="phone" class="form-label required">Phone</label>
+                                    <input type="tel" name="phone" id="phone"
+                                           class="form-control" required="required"
+                                           t-att-value="values.get('phone', '')"
+                                           placeholder="+675 ..."/>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="country" class="form-label required">Country</label>
+                                <select name="country" id="country"
+                                        class="form-select" required="required">
+                                    <option value="">-- Select country --</option>
+                                    <option t-foreach="country_list" t-as="c"
+                                            t-att-value="c[0]"
+                                            t-att-selected="str(c[0]) == str(values.get('country', '115'))">
+                                        <t t-esc="c[1]"/>
+                                    </option>
+                                </select>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend>Service Inquiry</legend>
+
+                            <div class="mb-3">
+                                <label for="industry" class="form-label required">Industry</label>
+                                <select name="industry" id="industry"
+                                        class="form-select" required="required">
+                                    <option value="">-- Select industry --</option>
+                                    <option value="logistics"
+                                            t-att-selected="values.get('industry') == 'logistics'">Logistics</option>
+                                    <option value="property"
+                                            t-att-selected="values.get('industry') == 'property'">Property</option>
+                                    <option value="hospitality"
+                                            t-att-selected="values.get('industry') == 'hospitality'">Hospitality</option>
+                                    <option value="joint_venture"
+                                            t-att-selected="values.get('industry') == 'joint_venture'">Joint Venture</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="service_needed" class="form-label required">Service needed</label>
+                                <select name="service_needed" id="service_needed"
+                                        class="form-select" required="required">
+                                    <option value="">-- Select service --</option>
+                                    <option value="shipping"
+                                            t-att-selected="values.get('service_needed') == 'shipping'">Shipping (FCL/LCL/Stevedoring/Tug)</option>
+                                    <option value="logistics"
+                                            t-att-selected="values.get('service_needed') == 'logistics'">Logistics (Customs/Freight forwarding)</option>
+                                    <option value="property"
+                                            t-att-selected="values.get('service_needed') == 'property'">Property (Office/Warehouse lease)</option>
+                                    <option value="hotels"
+                                            t-att-selected="values.get('service_needed') == 'hotels'">Hotels &amp; Hospitality (Rooms/Events)</option>
+                                    <option value="other"
+                                            t-att-selected="values.get('service_needed') == 'other'">Other / Multiple services</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="company_size" class="form-label">
+                                    Company size <span class="o_onb_optional">(optional)</span>
+                                </label>
+                                <select name="company_size" id="company_size" class="form-select">
+                                    <option value="sme">SME &lt; 50 staff</option>
+                                    <option value="mid" selected="selected">Mid-market 50-200</option>
+                                    <option value="large">Large enterprise 200+</option>
+                                    <option value="mnc">Multinational</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="notes" class="form-label">
+                                    Additional notes <span class="o_onb_optional">(optional)</span>
+                                </label>
+                                <textarea name="notes" id="notes" class="form-control" rows="3"
+                                          placeholder="Tell us about your cargo, route, timeline, etc."/>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend>Documents <span class="o_onb_optional">(optional)</span></legend>
+                            <div class="mb-3">
+                                <label for="attachments" class="form-label">Upload files</label>
+                                <input type="file" name="attachments" id="attachments"
+                                       class="form-control" multiple="multiple"
+                                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/>
+                                <div class="form-text">
+                                    PDF, image, or document. Multiple files allowed.
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="/" class="btn btn-link">Cancel</a>
+                            <button type="submit" class="btn btn-primary o_onb_submit"
+                                    id="o_onb_submit_btn">Submit Inquiry</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Client-side validation + progress bar (Bước 4) -->
+                <script>
+                //<![CDATA[
+                (function () {
+                    'use strict';
+                    var form = document.getElementById('o_onb_form');
+                    var progressBar = document.getElementById('o_onb_progress_bar');
+                    var submitBtn = document.getElementById('o_onb_submit_btn');
+                    if (!form) return;
+
+                    var requiredFields = ['company_name', 'contact_person', 'email',
+                                          'phone', 'country', 'industry', 'service_needed'];
+
+                    function updateProgress() {
+                        var filled = 0;
+                        for (var i = 0; i < requiredFields.length; i++) {
+                            var el = document.getElementById(requiredFields[i]);
+                            if (el && el.value && el.value.trim() !== '') filled++;
+                        }
+                        var pct = Math.round(filled / requiredFields.length * 100);
+                        if (progressBar) progressBar.style.width = pct + '%';
+                    }
+
+                    // Update progress on any input/change
+                    form.addEventListener('input', updateProgress);
+                    form.addEventListener('change', updateProgress);
+                    updateProgress();
+
+                    // Client-side validation before submit
+                    form.addEventListener('submit', function (ev) {
+                        var missing = [];
+                        for (var i = 0; i < requiredFields.length; i++) {
+                            var el = document.getElementById(requiredFields[i]);
+                            if (!el || !el.value || el.value.trim() === '') {
+                                missing.push(requiredFields[i]);
+                                if (el) el.classList.add('is-invalid');
+                            } else {
+                                el.classList.remove('is-invalid');
+                            }
+                        }
+                        if (missing.length > 0) {
+                            ev.preventDefault();
+                            submitBtn.disabled = true;
+                            // Scroll to first missing
+                            var first = document.getElementById(missing[0]);
+                            if (first) {
+                                first.scrollIntoView({behavior: 'smooth', block: 'center'});
+                                first.focus();
+                            }
+                            // Show alert
+                            var alertHtml = '<div class="alert alert-danger o_onb_error" id="o_onb_alert">'
+                                + '<strong>Please fill in all required fields:</strong> '
+                                + missing.join(', ')
+                                + '</div>';
+                            var existing = document.getElementById('o_onb_alert');
+                            if (existing) existing.remove();
+                            form.insertAdjacentHTML('beforebegin', alertHtml);
+                            setTimeout(function () { submitBtn.disabled = false; }, 1500);
+                            return false;
+                        }
+
+                        // Disable submit + show loading state
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML =
+                            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+                    });
+                })();
+                //]]>
+                </script>
+            </t>
+        </template>
+
+        <!-- ================== Thank-you page (Bước 4: polished) ================== -->
+        <template id="onboarding_thanks" name="Steamships Onboarding - Thank you">
+            <t t-call="website.layout">
+                <head>
+                    <style>
+                        :root { --ss-red: #CE1126; --ss-yellow: #FCD116; --ss-purple: #714B67; }
+                        .o_onb_thanks_hero {
+                            background: linear-gradient(135deg, #2c5530 0%, #4a7c4e 100%);
+                            color: white; padding: 32px 24px; border-radius: 8px;
+                            margin-bottom: 24px; text-align: center;
+                        }
+                        .o_onb_thanks_hero h2 { color: white; margin: 0; font-weight: 700; }
+                        .o_onb_thanks_steps { background: white; padding: 24px; border-radius: 8px; margin-bottom: 24px; }
+                        .o_onb_thanks_steps li { padding: 8px 0; }
+                        .o_onb_thanks_summary { background: white; padding: 24px; border-radius: 8px; }
+                        .o_onb_thanks_summary th { background: #f0f0f5; width: 30%; }
+                    </style>
+                </head>
+                <div id="wrap" class="container my-4" style="max-width: 800px;">
+                    <div class="o_onb_thanks_hero">
+                        <h2>✓ Inquiry Received</h2>
+                        <p>Reference: <strong><t t-esc="lead.name"/></strong></p>
+                    </div>
+
+                    <div class="o_onb_thanks_steps">
+                        <h3>What happens next</h3>
+                        <ol>
+                            <li>
+                                <strong>Within 24 hours</strong> — our sales team will contact you to confirm documents.
+                            </li>
+                            <li>
+                                <strong>Within 3 business days</strong> — you'll receive a KYC checklist to complete.
+                            </li>
+                            <li>
+                                <strong>Within 1 week</strong> — once KYC is approved, we'll prepare a quote based on your inquiry.
+                            </li>
+                        </ol>
+                    </div>
+
+                    <div class="o_onb_thanks_summary">
+                        <h3>Your submission</h3>
+                        <table class="table">
+                            <tr><th>Reference</th><td><t t-esc="lead.name"/></td></tr>
+                            <tr><th>Company</th><td><t t-esc="partner.name"/></td></tr>
+                            <tr><th>Contact</th><td><t t-esc="partner.email"/></td></tr>
+                            <tr><th>Files attached</th><td><t t-esc="file_count"/></td></tr>
+                        </table>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <a href="/" class="btn btn-primary">Back to home</a>
+                    </div>
+                </div>
+            </t>
+        </template>
+
+    </data>
+</odoo>

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Inherit crm.lead form to add Steamships tab + KYC button -->
+        <record id="view_crm_lead_form_inherit_steamships" model="ir.ui.view">
+            <field name="name">crm.lead.form.steamships</field>
+            <field name="model">crm.lead</field>
+            <field name="inherit_id" ref="crm.crm_lead_view_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='tag_ids']" position="before">
+                    <field name="steamships_division_id"/>
+                    <field name="steamships_branch_id"/>
+                </xpath>
+                <xpath expr="//div[@name='button_box']" position="inside">
+                    <button name="action_open_onboarding"
+                            type="object"
+                            class="oe_stat_button"
+                            icon="fa-id-card">
+                        <div class="o_field_widget o_stat_info">
+                            <span class="o_stat_text">KYC</span>
+                            <span class="o_stat_text">
+                                <field name="onboarding_completion" nolabel="1" widget="integer"/> %
+                            </span>
+                        </div>
+                    </button>
+                </xpath>
+                <xpath expr="//page[@name='lead']" position="after">
+                    <page string="Onboarding / KYC" name="steamships_onboarding">
+                        <group>
+                            <group>
+                                <field name="onboarding_id" invisible="1"/>
+                                <field name="onboarding_state" widget="badge"
+                                       decoration-success="onboarding_state == 'approved'"
+                                       decoration-warning="onboarding_state in ('in_progress', 'kyc_done')"
+                                       decoration-danger="onboarding_state == 'rejected'"
+                                       decoration-info="onboarding_state == 'draft'"/>
+                            </group>
+                            <group>
+                                <button name="action_start_onboarding"
+                                        type="object"
+                                        string="Start Onboarding"
+                                        class="oe_highlight"
+                                        invisible="onboarding_id"/>
+                                <button name="action_open_onboarding"
+                                        type="object"
+                                        string="Open KYC Checklist"
+                                        invisible="not onboarding_id"/>
+                            </group>
+                        </group>
+                        <group invisible="not onboarding_id">
+                            <group string="Customer Profile">
+                                <field name="onboarding_id" nolabel="0"/>
+                            </group>
+                            <group string="KYC Status">
+                                <field name="onboarding_completion" widget="progressbar"/>
+                            </group>
+                        </group>
+                    </page>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- Onboarding form view -->
+        <record id="view_crm_lead_steamships_onboarding_form" model="ir.ui.view">
+            <field name="name">crm.lead.steamships.onboarding.form</field>
+            <field name="model">crm.lead.steamships.onboarding</field>
+            <field name="arch" type="xml">
+                <form string="Customer Onboarding">
+                    <header>
+                        <field name="onboarding_state" widget="statusbar"
+                               statusbar_visible="draft,in_progress,kyc_done,approved"/>
+                        <button name="action_start" type="object"
+                                string="Start KYC" class="oe_highlight"
+                                invisible="onboarding_state != 'draft'"/>
+                        <button name="action_mark_kyc_done" type="object"
+                                string="Mark KYC Complete"
+                                invisible="completion_pct &lt; 100 or onboarding_state != 'in_progress'"/>
+                        <button name="action_approve" type="object"
+                                string="Approve"
+                                invisible="onboarding_state != 'kyc_done'"/>
+                        <button name="action_reject" type="object"
+                                string="Reject"
+                                invisible="onboarding_state in ('approved', 'rejected')"/>
+                    </header>
+                    <sheet>
+                        <div class="oe_button_box" name="button_box">
+                            <button class="oe_stat_button" icon="fa-list" disabled="1">
+                                <field name="completion_pct" widget="statinfo" string="KYC %"/>
+                            </button>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="lead_id"/>
+                                <field name="industry" widget="selection"/>
+                                <field name="service_needed" widget="selection"/>
+                                <field name="company_size" widget="selection"/>
+                            </group>
+                            <group>
+                                <field name="vessels_count"/>
+                                <field name="cargo_volume_mt"/>
+                                <field name="property_area_sqm"/>
+                                <field name="hotel_room_nights"/>
+                            </group>
+                        </group>
+
+                        <separator string="KYC Document Checklist"/>
+                        <group>
+                            <group>
+                                <field name="ipa_cert"/>
+                                <field name="ipa_cert_date" invisible="not ipa_cert"/>
+                                <field name="tax_id"/>
+                                <field name="tax_id_ref" invisible="not tax_id"/>
+                                <field name="bank_ref"/>
+                                <field name="bank_ref_date" invisible="not bank_ref"/>
+                            </group>
+                            <group>
+                                <field name="directors_id"/>
+                                <field name="pep_check"/>
+                                <field name="credit_check"/>
+                                <field name="insurance_cert"/>
+                                <field name="contract_signed"/>
+                            </group>
+                        </group>
+
+                        <separator string="Internal Notes"/>
+                        <field name="notes" placeholder="AML/PEP findings, risk rating, comments..."/>
+                    </sheet>
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids"/>
+                        <field name="activity_ids"/>
+                        <field name="message_ids"/>
+                    </div>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_crm_lead_steamships_onboarding_tree" model="ir.ui.view">
+            <field name="name">crm.lead.steamships.onboarding.tree</field>
+            <field name="model">crm.lead.steamships.onboarding</field>
+            <field name="arch" type="xml">
+                <list string="Onboardings">
+                    <field name="lead_id"/>
+                    <field name="industry"/>
+                    <field name="company_size"/>
+                    <field name="completion_pct" widget="progressbar"/>
+                    <field name="onboarding_state" widget="badge"
+                           decoration-success="onboarding_state == 'approved'"
+                           decoration-danger="onboarding_state == 'rejected'"
+                           decoration-warning="onboarding_state in ('in_progress', 'kyc_done')"
+                           decoration-info="onboarding_state == 'draft'"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="action_crm_lead_steamships_onboarding" model="ir.actions.act_window">
+            <field name="name">Customer Onboardings</field>
+            <field name="res_model">crm.lead.steamships.onboarding</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+    </data>
+</odoo>

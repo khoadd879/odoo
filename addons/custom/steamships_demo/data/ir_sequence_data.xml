@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="sequence_steamships_quote" model="ir.sequence">
+            <field name="name">Steamships Quotation</field>
+            <field name="code">sale.order</field>
+            <field name="prefix">SS-QT/%(year)s/</field>
+            <field name="padding">4</field>
+            <field name="company_id" ref="res_company_steamships"/>
+        </record>
+    </data>
+</odoo>

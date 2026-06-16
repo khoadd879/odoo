@@ -33,17 +33,17 @@ Host (Linux)
     │   │   ├── server-ux/
     │   │   └── server-tools/
     │   └── custom/                ← module của bạn, extend OCA + core
-    │       ├── README.md
-    │       └── hello_shop/        ← module scaffold
+    │       └── steamships_demo/   ← Steamships Trading (PNG) demo
     │           ├── __init__.py
     │           ├── __manifest__.py
+    │           ├── mock_sops.py   ← AI chatbot knowledge base (15 SOPs)
     │           ├── models/
-    │           │   ├── __init__.py
-    │           │   └── hello_product.py
     │           ├── views/
-    │           │   └── hello_product_views.xml
-    │           └── security/
-    │               └── ir.model.access.csv
+    │           ├── controllers/   ← AI chatbot HTTP endpoint
+    │           ├── wizards/       ← KYC onboarding wizard
+    │           ├── data/          ← seed data: divisions, branches, products, leads
+    │           ├── security/
+    │           └── static/        ← JS widget, description HTML
     ├── postgres-data/             ← Docker volume, gitignored
     ├── odoo-data/                 ← filestore + sessions, gitignored
     └── scripts/
@@ -139,7 +139,7 @@ Qua UI:
     └─► Field "Hello Tag" xuất hiện trong form product
 
 Qua CLI:
-  bash scripts/cli.sh -d odoo_dev -i hello_shop --stop-after-init
+  bash scripts/cli.sh -d odoo_dev -i steamships_demo --stop-after-init
     │
     └─► Tương tự UI flow, Odoo tự shutdown sau khi xong (--stop-after-init)
 ```
@@ -147,7 +147,7 @@ Qua CLI:
 ### 4.2 Upgrade sau khi sửa code
 
 ```
-Dev: edit addons/custom/hello_shop/models/hello_product.py
+Dev: edit addons/custom/steamships_demo/models/division.py
   │
   ├─► Dev: docker compose restart odoo  (hoặc UI: Upgrade)
   │
@@ -217,7 +217,7 @@ bash scripts/smoke.sh         # HTTP 200
 docker compose up -d
 
 # Edit code
-vim addons/custom/hello_shop/models/hello_product.py
+vim addons/custom/steamships_demo/models/division.py
 
 # Restart Odoo (5-10s)
 docker compose restart odoo

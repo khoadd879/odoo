@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- =============== SHIPPING =============== -->
+        <record id="product_fcl_20" model="product.product">
+            <field name="name">FCL 20ft Container (per box)</field>
+            <field name="default_code">SHIP-FCL20</field>
+            <field name="categ_id" ref="product_category_shipping"/>
+            <field name="type">service</field>
+            <field name="list_price">4500.00</field>
+            <field name="uom_id" ref="uom.product_uom_unit"/>
+            <field name="uom_po_id" ref="uom.product_uom_unit"/>
+            <field name="description_sale">Full Container Load 20ft shipping from Lae/Motukea to international destinations. Includes lift-on/lift-off, 14 days free time at depot.</field>
+        </record>
+        <record id="product_fcl_40" model="product.product">
+            <field name="name">FCL 40ft Container (per box)</field>
+            <field name="default_code">SHIP-FCL40</field>
+            <field name="categ_id" ref="product_category_shipping"/>
+            <field name="type">service</field>
+            <field name="list_price">7800.00</field>
+            <field name="uom_id" ref="uom.product_uom_unit"/>
+            <field name="uom_po_id" ref="uom.product_uom_unit"/>
+            <field name="description_sale">Full Container Load 40ft shipping, includes 14 days free time at depot.</field>
+        </record>
+        <record id="product_lcl" model="product.product">
+            <field name="name">LCL Cargo (per CBM)</field>
+            <field name="default_code">SHIP-LCL</field>
+            <field name="categ_id" ref="product_category_shipping"/>
+            <field name="type">service</field>
+            <field name="list_price">280.00</field>
+            <field name="uom_id" ref="uom.product_uom_cubic_meter"/>
+            <field name="uom_po_id" ref="uom.product_uom_cubic_meter"/>
+            <field name="description_sale">Less than Container Load - consolidated cargo. Per cubic meter, min 1 CBM.</field>
+        </record>
+        <record id="product_stevedoring" model="product.product">
+            <field name="name">Stevedoring (per MT)</field>
+            <field name="default_code">SHIP-STEV</field>
+            <field name="categ_id" ref="product_category_shipping"/>
+            <field name="type">service</field>
+            <field name="list_price">85.00</field>
+            <field name="uom_id" ref="uom.product_uom_kgm"/>
+            <field name="uom_po_id" ref="uom.product_uom_kgm"/>
+            <field name="description_sale">Stevedoring labor charge per metric ton. Includes lashing/securing.</field>
+        </record>
+        <record id="product_tug" model="product.product">
+            <field name="name">Tug Assist (per hour)</field>
+            <field name="default_code">SHIP-TUG</field>
+            <field name="categ_id" ref="product_category_shipping"/>
+            <field name="type">service</field>
+            <field name="list_price">6500.00</field>
+            <field name="uom_id" ref="uom.product_uom_hour"/>
+            <field name="uom_po_id" ref="uom.product_uom_hour"/>
+            <field name="description_sale">Tug boat assistance for berthing/unberthing. Min 2 hours.</field>
+        </record>
+
+        <!-- =============== PROPERTY =============== -->
+        <record id="product_office_a" model="product.product">
+            <field name="name">Office Lease - Grade A (per sqm/month)</field>
+            <field name="default_code">PROP-OFFA</field>
+            <field name="categ_id" ref="product_category_property"/>
+            <field name="type">service</field>
+            <field name="list_price">95.00</field>
+            <field name="uom_id" ref="uom.uom_square_meter"/>
+            <field name="uom_po_id" ref="uom.uom_square_meter"/>
+            <field name="description_sale">Grade A office space, fully fitted, central POM CBD, 24/7 security, backup power.</field>
+        </record>
+        <record id="product_warehouse" model="product.product">
+            <field name="name">Warehouse Lease (per sqm/month)</field>
+            <field name="default_code">PROP-WHSE</field>
+            <field name="categ_id" ref="product_category_property"/>
+            <field name="type">service</field>
+            <field name="list_price">45.00</field>
+            <field name="uom_id" ref="uom.uom_square_meter"/>
+            <field name="uom_po_id" ref="uom.uom_square_meter"/>
+            <field name="description_sale">Industrial warehouse with loading dock. Motukea or Lae locations.</field>
+        </record>
+
+        <!-- =============== HOTELS =============== -->
+        <record id="product_std_room" model="product.product">
+            <field name="name">Standard Room (per night)</field>
+            <field name="default_code">HOTL-STD</field>
+            <field name="categ_id" ref="product_category_hotels"/>
+            <field name="type">service</field>
+            <field name="list_price">650.00</field>
+            <field name="uom_id" ref="uom.product_uom_day"/>
+            <field name="uom_po_id" ref="uom.product_uom_day"/>
+            <field name="description_sale">Standard king room, includes breakfast, WiFi. Subject to availability.</field>
+        </record>
+        <record id="product_suite_room" model="product.product">
+            <field name="name">Executive Suite (per night)</field>
+            <field name="default_code">HOTL-SUITE</field>
+            <field name="categ_id" ref="product_category_hotels"/>
+            <field name="type">service</field>
+            <field name="list_price">1450.00</field>
+            <field name="uom_id" ref="uom.product_uom_day"/>
+            <field name="uom_po_id" ref="uom.product_uom_day"/>
+            <field name="description_sale">Executive suite with lounge access, complimentary airport transfer.</field>
+        </record>
+        <record id="product_conference" model="product.product">
+            <field name="name">Conference Room (per day)</field>
+            <field name="default_code">HOTL-CONF</field>
+            <field name="categ_id" ref="product_category_hotels"/>
+            <field name="type">service</field>
+            <field name="list_price">2500.00</field>
+            <field name="uom_id" ref="uom.product_uom_day"/>
+            <field name="uom_po_id" ref="uom.product_uom_day"/>
+            <field name="description_sale">Conference room up to 20 pax, includes AV equipment, morning/afternoon tea.</field>
+        </record>
+
+        <!-- =============== LOGISTICS =============== -->
+        <record id="product_customs" model="product.product">
+            <field name="name">Customs Clearance (per shipment)</field>
+            <field name="default_code">LOGI-CUST</field>
+            <field name="categ_id" ref="product_category_logistics"/>
+            <field name="type">service</field>
+            <field name="list_price">1500.00</field>
+            <field name="uom_id" ref="uom.product_uom_unit"/>
+            <field name="uom_po_id" ref="uom.product_uom_unit"/>
+            <field name="description_sale">Customs broker fee. Includes lodgement, duty calculation, liaising with PNG Customs.</field>
+        </record>
+        <record id="product_freight" model="product.product">
+            <field name="name">Inland Freight (per km/MT)</field>
+            <field name="default_code">LOGI-FRT</field>
+            <field name="categ_id" ref="product_category_logistics"/>
+            <field name="type">service</field>
+            <field name="list_price">12.50</field>
+            <field name="uom_id" ref="uom.product_uom_km"/>
+            <field name="uom_po_id" ref="uom.product_uom_km"/>
+            <field name="description_sale">Inland trucking, per km per metric ton. Min charge applies.</field>
+        </record>
+
+    </data>
+</odoo>

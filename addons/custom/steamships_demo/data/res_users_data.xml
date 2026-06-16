@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="user_sales_lead" model="res.users">
+            <field name="name">Sales Manager</field>
+            <field name="login">sales.lead@steamships.com.pg</field>
+            <field name="email">sales.lead@steamships.com.pg</field>
+            <field name="active" eval="True"/>
+            <field name="company_id" ref="res_company_steamships"/>
+            <field name="company_ids" eval="[(6, 0, [ref('res_company_steamships')])]"/>
+            <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_manager')])]"/>
+        </record>
+        <record id="user_ship_sales" model="res.users">
+            <field name="name">Shipping Sales (Liam)</field>
+            <field name="login">ship.sales@steamships.com.pg</field>
+            <field name="email">liam@steamships.com.pg</field>
+            <field name="active" eval="True"/>
+            <field name="company_id" ref="res_company_steamships"/>
+            <field name="company_ids" eval="[(6, 0, [ref('res_company_steamships')])]"/>
+            <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman_all_leads')])]"/>
+        </record>
+        <record id="user_prop_sales" model="res.users">
+            <field name="name">Property Sales (Mere)</field>
+            <field name="login">prop.sales@steamships.com.pg</field>
+            <field name="email">mere@steamships.com.pg</field>
+            <field name="active" eval="True"/>
+            <field name="company_id" ref="res_company_steamships"/>
+            <field name="company_ids" eval="[(6, 0, [ref('res_company_steamships')])]"/>
+            <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman_all_leads')])]"/>
+        </record>
+        <record id="user_hotel_sales" model="res.users">
+            <field name="name">Hotels Sales (Aroha)</field>
+            <field name="login">hotel.sales@steamships.com.pg</field>
+            <field name="email">aroha@steamships.com.pg</field>
+            <field name="active" eval="True"/>
+            <field name="company_id" ref="res_company_steamships"/>
+            <field name="company_ids" eval="[(6, 0, [ref('res_company_steamships')])]"/>
+            <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman_all_leads')])]"/>
+        </record>
+
+        <!-- Team members -->
+        <record model="crm.team.member" id="team_member_ship_liam">
+            <field name="crm_team_id" ref="crm_team_shipping"/>
+            <field name="user_id" ref="user_ship_sales"/>
+        </record>
+        <record model="crm.team.member" id="team_member_prop_mere">
+            <field name="crm_team_id" ref="crm_team_property"/>
+            <field name="user_id" ref="user_prop_sales"/>
+        </record>
+        <record model="crm.team.member" id="team_member_hotel_aroha">
+            <field name="crm_team_id" ref="crm_team_hotels"/>
+            <field name="user_id" ref="user_hotel_sales"/>
+        </record>
+        <record model="crm.team.member" id="team_member_logistics_lead">
+            <field name="crm_team_id" ref="crm_team_logistics"/>
+            <field name="user_id" ref="user_sales_lead"/>
+        </record>
+
+    </data>
+</odoo>
