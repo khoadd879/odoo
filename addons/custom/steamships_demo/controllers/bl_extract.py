@@ -26,7 +26,7 @@ from odoo.http import request
 _logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip()
-GROQ_VISION_MODEL = 'llama-3.2-90b-vision-preview'
+GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'  # was llama-3.2-90b-vision-preview (decommissioned)
 GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 # Strict JSON schema prompt — ask model to return ONLY this shape.
