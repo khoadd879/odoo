@@ -39,6 +39,7 @@
         "views/sale_order_views.xml",
         "views/product_views.xml",
         "views/chat_widget_views.xml",
+        "views/bill_of_lading_views.xml",
         "views/menu_views.xml",
         "views/onboarding_form.xml",
         "views/website_branding.xml",

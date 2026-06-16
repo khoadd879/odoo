@@ -42,6 +42,12 @@
                   action="action_steamships_pricelist"
                   sequence="30"/>
 
+        <menuitem id="menu_steamships_bl"
+                  name="Bills of Lading"
+                  parent="menu_steamships_root"
+                  action="action_bill_of_lading"
+                  sequence="50"/>
+
         <menuitem id="menu_steamships_sales"
                   name="Sales"
                   parent="menu_steamships_root"

@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Tree view (list of B/Ls) -->
+        <record id="view_bill_of_lading_tree" model="ir.ui.view">
+            <field name="name">bill.of.lading.tree</field>
+            <field name="model">bill.of.lading</field>
+            <field name="arch" type="xml">
+                <list decoration-warning="state=='pending_review'"
+                 decoration-success="state=='approved'"
+                 decoration-danger="state=='rejected'">
+                    <field name="name"/>
+                    <field name="vessel_name"/>
+                    <field name="port_of_loading"/>
+                    <field name="port_of_discharge"/>
+                    <field name="bl_date"/>
+                    <field name="confidence_score" widget="progressbar"/>
+                    <field name="state"/>
+                </list>
+            </field>
+        </record>
+
+        <!-- Form view (review screen) -->
+        <record id="view_bill_of_lading_form" model="ir.ui.view">
+            <field name="name">bill.of.lading.form</field>
+            <field name="model">bill.of.lading</field>
+            <field name="arch" type="xml">
+                <form>
+                    <header>
+                        <button name="action_approve" type="object"
+                                string="Approve" class="btn-primary"
+                                invisible="state in ('approved', 'rejected')"/>
+                        <button name="action_reset_to_review" type="object"
+                                string="Reset to Review"
+                                invisible="state == 'pending_review'"/>
+                        <button name="action_reject" type="object"
+                                string="Reject" class="btn-danger"
+                                invisible="state in ('approved', 'rejected')"/>
+                        <field name="state" widget="statusbar"
+                               statusbar_visible="pending_review,approved,rejected"/>
+                    </header>
+                    <sheet>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="name" placeholder="B/L Number"/>
+                            </h1>
+                        </div>
+                        <group col="4">
+                            <field name="bl_date"/>
+                            <field name="confidence_score" widget="float_percent"/>
+                            <field name="vessel_name"/>
+                            <field name="voyage_number"/>
+                        </group>
+                        <group string="Parties">
+                            <field name="shipper"
+                                   decoration-danger="'shipper' in low_confidence_fields"
+                                   decoration-warning="'shipper' in low_confidence_fields"/>
+                            <field name="consignee"/>
+                            <field name="notify_party"
+                                   decoration-warning="'notify_party' in low_confidence_fields"/>
+                        </group>
+                        <group string="Route">
+                            <field name="port_of_loading"/>
+                            <field name="port_of_discharge"/>
+                        </group>
+                        <group string="Cargo">
+                            <field name="container_numbers"
+                                   decoration-warning="'container_numbers' in low_confidence_fields"/>
+                            <field name="cargo_description"/>
+                            <field name="gross_weight_kg"
+                                   decoration-warning="'gross_weight_kg' in low_confidence_fields"/>
+                        </group>
+                        <group string="AI Extraction Metadata">
+                            <field name="source_scan_filename"/>
+                            <field name="source_attachment_id" widget="many2one_binary"/>
+                            <field name="low_confidence_fields"
+                                   decoration-danger="bool(low_confidence_fields)"
+                                   decoration-muted="not bool(low_confidence_fields)"/>
+                        </group>
+                        <group string="Review" invisible="state == 'pending_review'">
+                            <field name="reviewer_id"/>
+                            <field name="reviewed_date"/>
+                            <field name="review_notes"/>
+                        </group>
+                    </sheet>
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids"/>
+                        <field name="activity_ids"/>
+                        <field name="message_ids"/>
+                    </div>
+                </form>
+            </field>
+        </record>
+
+        <!-- Action: window action opening B/L list -->
+        <record id="action_bill_of_lading" model="ir.actions.act_window">
+            <field name="name">Bills of Lading</field>
+            <field name="res_model">bill.of.lading</field>
+            <field name="view_mode">list,form</field>
+            <field name="domain">[]</field>
+            <field name="context">{'search_default_pending': 1}</field>
+        </record>
+
+        <!-- Search view -->
+        <record id="view_bill_of_lading_search" model="ir.ui.view">
+            <field name="name">bill.of.lading.search</field>
+            <field name="model">bill.of.lading</field>
+            <field name="arch" type="xml">
+                <search>
+                    <filter name="pending" string="Pending Review"
+                            domain="[('state', '=', 'pending_review')]"/>
+                    <filter name="approved" string="Approved"
+                            domain="[('state', '=', 'approved')]"/>
+                    <filter name="low_conf" string="Low confidence"
+                            domain="[('confidence_score', '&lt;', 0.7)]"/>
+                    <field name="name"/>
+                    <field name="vessel_name"/>
+                    <field name="shipper"/>
+                </search>
+            </field>
+        </record>
+
+    </data>
+</odoo>
