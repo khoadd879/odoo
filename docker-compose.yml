@@ -41,6 +41,7 @@ services:
       MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD}
       MAIL_SMTP_FROM: ${MAIL_SMTP_FROM}
       MAIL_SMTP_FROM_NAME: ${MAIL_SMTP_FROM_NAME}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
       - ./addons:/mnt/extra-addons
       - ./odoo-data:/var/lib/odoo
