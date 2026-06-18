@@ -29,6 +29,10 @@
                             <group>
                                 <field name="x_discount_pct" string="Avg discount %"/>
                                 <field name="x_discount_amount"/>
+                                <field name="x_internal_margin_pct" string="Internal margin %"
+                                       widget="percentage"
+                                       decoration-success="x_internal_margin_pct &gt; 20"
+                                       decoration-warning="x_internal_margin_pct &lt; 10"/>
                                 <field name="approval_state" widget="badge"
                                        decoration-success="approval_state == 'approved'"
                                        decoration-danger="approval_state == 'rejected'"

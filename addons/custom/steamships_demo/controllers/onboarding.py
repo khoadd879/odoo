@@ -95,9 +95,8 @@ class SteamshipsOnboarding(http.Controller):
         stage = request.env.ref('steamships_demo.stage_lead', raise_if_not_found=False)
         stage_id = stage.id if stage else False
 
-        # 4. Get default team (Shipping, fallback to any)
-        team = request.env.ref('steamships_demo.crm_team_shipping',
-                               raise_if_not_found=False)
+        # 4. Get team per industry (Phase 2.6 fix: was hardcoded Shipping)
+        team = self._auto_assign_team(post['industry'], SYSTEM)
         team_id = team.id if team else False
 
         # 4b. Auto-assign salesperson theo industry (Bước 3)
@@ -170,6 +169,18 @@ class SteamshipsOnboarding(http.Controller):
             'company_size': post.get('company_size', 'mid'),  # default
         })
 
+        # 8b. Auto-move lead to "Onboarding Docs" stage (Phase 1.2)
+        # Lead has files attached + KYC started → "Onboarding Docs" is the right stage
+        onboarding_stage = request.env.ref(
+            'steamships_demo.stage_onboarding_docs', raise_if_not_found=False)
+        if onboarding_stage and lead.stage_id != onboarding_stage:
+            old_stage_name = lead.stage_id.name if lead.stage_id else 'None'
+            lead.write({'stage_id': onboarding_stage.id})
+            lead.message_post(
+                body=_('CRM stage auto-moved "%s" → "%s" (onboarding form submitted with KYC + files).')
+                     % (old_stage_name, onboarding_stage.name),
+                subtype_xmlid='mail.mt_note')
+
         # 9. Chatter log on lead (visible in pipeline)
         lead.message_post(
             body=_('Onboarding form submitted by %s. '
@@ -203,7 +214,23 @@ class SteamshipsOnboarding(http.Controller):
             _logger.info('Onboarding form: 24h activity created for user %s, lead %d',
                          user_id, lead.id)
 
-        # 10. Render thank-you page with lead id
+        # 10. Send confirmation email (Phase 1.3) — best effort, no SMTP needed in dev
+        try:
+            template = request.env.ref(
+                'steamships_demo.mail_template_onboarding_thanks',
+                raise_if_not_found=False)
+            if template and partner.email:
+                template.with_user(SYSTEM).send_mail(
+                    lead.id, force_send=False, email_values={
+                        'email_to': partner.email,
+                        'recipient_ids': [(4, partner.id)],
+                    })
+                _logger.info('Onboarding confirmation email queued for %s',
+                             partner.email)
+        except Exception as e:
+            _logger.warning('Onboarding email failed: %s', e)
+
+        # 11. Render thank-you page with lead id
         return request.render('steamships_demo.onboarding_thanks', {
             'lead': lead,
             'partner': partner,
@@ -237,6 +264,32 @@ class SteamshipsOnboarding(http.Controller):
         _logger.info('Auto-assign: industry=%s -> user=%s (id %s)',
                      industry, user.name, user.id)
         return user
+
+    def _auto_assign_team(self, industry, system_user):
+        """Map industry → sales team (Phase 2.6 fix).
+
+        Rule:
+            logistics     -> crm_team_logistics
+            property      -> crm_team_property
+            hospitality   -> crm_team_hotels
+            joint_venture -> crm_team_shipping (fallback — JV usually via shipping)
+        """
+        mapping = {
+            'logistics': 'steamships_demo.crm_team_logistics',
+            'property': 'steamships_demo.crm_team_property',
+            'hospitality': 'steamships_demo.crm_team_hotels',
+            'joint_venture': 'steamships_demo.crm_team_shipping',
+        }
+        xmlid = mapping.get(industry, 'steamships_demo.crm_team_shipping')
+        team = request.env.ref(xmlid, raise_if_not_found=False)
+        if not team:
+            _logger.warning('Auto-team: xmlid %s not found, using fallback', xmlid)
+            team = request.env['crm.team'].search(
+                [('name', '=', 'Shipping')], limit=1)
+        if team:
+            _logger.info('Auto-team: industry=%s -> team=%s',
+                         industry, team.name)
+        return team
 
     def _industry_options(self):
         """Return industry selection (mirror crm.lead.steamships.onboarding model)."""

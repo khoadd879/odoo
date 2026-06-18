@@ -1,52 +1,79 @@
 """
-Steamships AI Chatbot - HTTP controller (MOCK MODE)
+Steamships AI Chatbot - HTTP controller
 
-Adapter pattern: real Claude API can swap in by setting
-ANTHROPIC_API_KEY env var. Without it, returns canned answers
-from a small SOP knowledge base (15 entries in mock_sops.py).
+Two modes (auto-detected at import time):
+  - GROQ_API_KEY set  → call Groq Llama 3.3 70B (real LLM)
+  - no key            → keyword-match mock against mock_sops
 
-Exposed as Odoo backend menu action "Steamships AI Assistant" (not a
-website page). Staff opens it from the main menu; render happens in
-the Odoo backend (web.assets_backend) so the chat history stays in
-the Odoo session, not the public website.
+Retrieval: top-3 SOPs from `mock_sops.search_sops()` (mock RAG).
+Session log: steamships.chatbot.session + steamships.chatbot.line
 """
-import json
 import logging
 import os
+
+import requests
 
 from odoo import http, fields
 from odoo.http import request
 
 _logger = logging.getLogger(__name__)
 
-# Mode constants (per DOCX B4: STAFF vs CLIENT)
 MODE_STAFF = 'staff'
 MODE_CLIENT = 'client'
 MODE_VALUES = (MODE_STAFF, MODE_CLIENT)
 
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip()
+GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile'
+GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+_MODE_INSTRUCTION = {
+    MODE_STAFF: (
+        "You are answering a Steamships staff member. "
+        "You may share internal SOPs and price list data."
+    ),
+    MODE_CLIENT: (
+        "You are answering a Steamships client (external). "
+        "DO NOT reveal internal SOPs, internal policies, or exact "
+        "internal prices. If asked, politely redirect to the sales team."
+    ),
+}
+
+
+def _call_groq_chat(message, context, mode):
+    """Call Groq Llama 3.3 70B. Returns reply text."""
+    prompt = (
+        f"You are the Steamships Trading Company (PNG) knowledge assistant.\n"
+        f"{_MODE_INSTRUCTION[mode]}\n"
+        f"Answer the user's question using the SOPs provided below. "
+        f"Be concise (max 4 sentences) and cite sources by SOP ID. "
+        f"If the SOPs don't cover the question, say so and offer to "
+        f"escalate to a human.\n\n"
+        f"SOPs:\n{context}\n\n"
+        f"User question: {message}"
+    )
+    resp = requests.post(
+        GROQ_CHAT_URL,
+        json={
+            'model': GROQ_CHAT_MODEL,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'temperature': 0.2,
+            'max_tokens': 512,
+        },
+        headers={
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json',
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data['choices'][0]['message']['content'].strip()
+
 
 class SteamshipsAIChatbot(http.Controller):
-    MOCK_MODE = not os.environ.get('ANTHROPIC_API_KEY')
-
-    # --- Chat endpoint (JSON-RPC, backend-authenticated) ---
 
     @http.route('/steamships/chat/api', type='json', auth='user')
     def chat_api(self, message, mode='staff', conversation_id=None, **kw):
-        """Process a chat message and return a reply.
-
-        Args:
-            message: user question (str)
-            mode: 'staff' (full SOPs + prices) or 'client' (FAQ only)
-            conversation_id: optional Odoo thread id for logging
-
-        Real LLM path (when ANTHROPIC_API_KEY set):
-            1. Retrieve top-k relevant SOPs from kb (BM25 or pgvector)
-            2. Build prompt with context (mode-filtered)
-            3. Call anthropic.messages.create()
-            4. Return text + sources
-
-        Mock path (no key): keyword match against mock_sops, mode-filtered.
-        """
         if not message:
             return {'reply': 'Please type a question.', 'sources': [], 'mode': mode}
 
@@ -55,102 +82,141 @@ class SteamshipsAIChatbot(http.Controller):
 
         from ..mock_sops import search_sops
 
-        # Mode-aware retrieval: client mode filters out SOPs/prices
         allowed_visibility = (
             ('public', 'staff') if mode == MODE_STAFF else ('public',)
         )
         sources = search_sops(message, top_k=3, visibility=allowed_visibility)
+        source_titles = [s.get('title', '?') for s in sources]
+        source_ids = [s.get('id', '?') for s in sources]
+        confidence = sources[0].get('confidence', 0.0) if sources else 0.0
 
-        if self.MOCK_MODE:
-            reply = self._mock_reply(message, sources, mode)
-        else:
-            reply = self._real_llm_reply(message, sources, mode)
-
-        # Log to chatter if linked to a record (best effort)
-        if conversation_id:
+        # Generate reply
+        # Always call Groq when key is present (RAG with optional SOP context).
+        # Fall back to mock ONLY when (a) no key OR (b) Groq call throws.
+        groq_actually_called = False
+        if GROQ_API_KEY:
             try:
-                rec = request.env[conversation_id.split(',')[0]].browse(
-                    int(conversation_id.split(',')[1]))
-                rec.message_post(
-                    body=f'[AI Chat ({mode})] Q: {message}\nA: {reply}',
-                    subtype_xmlid='mail.mt_note')
+                if sources:
+                    context = "\n\n".join(
+                        f"[{s.get('id', s.get('title', '?'))}] {s.get('title','')}\n"
+                        f"{s.get('content','')}"
+                        for s in sources
+                    )
+                else:
+                    context = "(No matching SOP found in Steamships knowledge base. Answer based on general business knowledge if appropriate, or say you don't know.)"
+                reply = _call_groq_chat(message, context, mode)
+                mock_mode = False
+                groq_actually_called = True
             except Exception as e:
-                _logger.warning('Could not log AI chat to chatter: %s', e)
+                _logger.exception('Groq chat call failed, falling back to mock')
+                reply = self._mock_reply(message, sources, mode)
+                mock_mode = True
+        else:
+            reply = self._mock_reply(message, sources, mode)
+            mock_mode = True
+
+        # Persist session (best effort)
+        session_id = None
+        try:
+            Session = request.env['steamships.chatbot.session']
+            Line = request.env['steamships.chatbot.line']
+            session = None
+            if conversation_id:
+                try:
+                    session = Session.browse(int(conversation_id))
+                    if not session.exists():
+                        session = None
+                except (ValueError, TypeError):
+                    session = None
+            if not session:
+                session = Session.create({'mode': mode})
+            session_id = session.id
+            Line.create({
+                'session_id': session_id,
+                'role': 'user',
+                'content': message,
+            })
+            Line.create({
+                'session_id': session_id,
+                'role': 'assistant',
+                'content': reply,
+                'source_names': ', '.join(source_ids),
+            })
+        except Exception as e:
+            _logger.warning('Could not persist chatbot session: %s', e)
 
         return {
             'reply': reply,
-            'sources': [s['title'] for s in sources],
+            'sources': source_titles,
+            'source_ids': source_ids,
+            'confidence': confidence,
             'mode': mode,
-            'mock_mode': self.MOCK_MODE,
+            'mock_mode': mock_mode,
+            'groq_enabled': bool(GROQ_API_KEY),
+            'conversation_id': session_id,
         }
 
-    # --- Helpers ---
+    @http.route('/steamships/chat/sessions', type='json', auth='user')
+    def list_sessions(self, limit=50, **kw):
+        """List recent chatbot sessions for the current user (most recent first)."""
+        sessions = request.env['steamships.chatbot.session'].search(
+            [], order='create_date desc', limit=int(limit),
+        )
+        return [{
+            'id': s.id,
+            'name': s.name or f"Session #{s.id}",
+            'mode': s.mode,
+            'create_date': s.create_date.isoformat(timespec='seconds') if s.create_date else '',
+            'message_count': len(s.line_ids),
+        } for s in sessions]
+
+    @http.route('/steamships/chat/session/lines', type='json', auth='user')
+    def session_lines(self, session_id, **kw):
+        """Return full conversation lines for one session (read-only)."""
+        try:
+            sid = int(session_id)
+        except (ValueError, TypeError):
+            return {'error': 'invalid session_id'}
+        session = request.env['steamships.chatbot.session'].browse(sid)
+        if not session.exists():
+            return {'error': 'session not found'}
+        return {
+            'id': session.id,
+            'name': session.name or f"Session #{session.id}",
+            'mode': session.mode,
+            'create_date': session.create_date.isoformat(timespec='seconds') if session.create_date else '',
+            'messages': [{
+                'role': l.role,
+                'content': l.content or '',
+                'sources': [x.strip() for x in (l.source_names or '').split(',') if x.strip()],
+                'create_date': l.create_date.isoformat(timespec='seconds') if l.create_date else '',
+            } for l in session.line_ids.sorted('create_date')],
+        }
 
     def _mock_reply(self, message, sources, mode):
         if not sources:
             if mode == MODE_CLIENT:
                 return (
-                    "[MOCK MODE - CLIENT] I'm a client onboarding helper. "
-                    "I can help with: KYC documents, registration steps, "
-                    "what to expect next. Try asking 'What documents do I need to onboard?' "
-                    "(Set ANTHROPIC_API_KEY env var to enable real LLM.)"
+                    "[MOCK - CLIENT] Welcome! I can help with KYC docs, "
+                    "onboarding steps, service inquiries, and contacts. "
+                    "_(Set GROQ_API_KEY for real LLM.)_"
                 )
             return (
-                "[MOCK MODE - STAFF] I'm a demo assistant for Steamships staff. "
-                "I can answer questions about: divisions, FCL/LCL pricing, "
-                "KYC requirements, discount approval rules. "
-                "Try asking 'What is FCL 20ft price?' or 'What documents do I need?' "
-                "(Set ANTHROPIC_API_KEY env var to enable real LLM.)"
+                "[MOCK - STAFF] Steamships knowledge assistant. "
+                "Try: 'FCL 20ft price?' or 'discount approval threshold?'. "
+                "_(Set GROQ_API_KEY for real LLM.)_"
             )
         best = sources[0]
-        # In client mode, never expose prices or SOP numbers
         if mode == MODE_CLIENT and (
             'pricing' in best.get('id', '').lower()
             or best.get('visibility') == 'staff'
         ):
             return (
-                "[MOCK MODE - CLIENT] That question is for staff only. "
-                "Please contact our sales team for pricing or internal SOPs."
+                "[MOCK - CLIENT] That question is for staff only. "
+                "Please contact our sales team."
             )
         return (
-            f"[MOCK MODE - {mode.upper()}] Based on **{best['title']}**:\n\n"
-            f"{best['content']}\n\n"
-            f"_Source: {best['title']}_"
+            f"[MOCK - {mode.upper()}] Based on **{best.get('title','?')}**:\n\n"
+            f"{best.get('content','')}\n\n"
+            f"_Source: {best.get('id', best.get('title','?'))}_"
         )
-
-    def _real_llm_reply(self, message, sources, mode):
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
-            context = "\n\n".join(
-                f"[{s['title']}]\n{s['content']}" for s in sources
-            )
-            mode_instruction = {
-                MODE_STAFF: (
-                    "You are answering a Steamships staff member. "
-                    "You may share internal SOPs and price list data."
-                ),
-                MODE_CLIENT: (
-                    "You are answering a Steamships client (external). "
-                    "DO NOT reveal internal SOPs, internal policies, or exact "
-                    "internal prices. If asked, politely redirect to the sales team."
-                ),
-            }[mode]
-            prompt = f"""You are the Steamships Trading Company (PNG) knowledge assistant.
-{mode_instruction}
-Answer the user's question using the SOPs provided below. Be concise and cite sources.
-If the SOPs don't cover the question, say so and offer to escalate to a human.
-
-SOPs:
-{context}
-
-User question: {message}"""
-            resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=512,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return resp.content[0].text
-        except Exception as e:
-            _logger.exception("Real LLM call failed")
-            return f"AI service error: {e}"

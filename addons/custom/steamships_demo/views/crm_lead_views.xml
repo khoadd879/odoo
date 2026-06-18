@@ -82,6 +82,15 @@
                         <button name="action_reject" type="object"
                                 string="Reject"
                                 invisible="onboarding_state in ('approved', 'rejected')"/>
+                        <button name="action_reset_to_draft" type="object"
+                                string="Reset to Draft"
+                                class="btn-secondary"
+                                invisible="onboarding_state not in ('in_progress', 'kyc_done', 'approved')"
+                                confirm="Reset onboarding to Draft? Lead will move back to Onboarding Docs if it was approved."/>
+                        <button name="action_reopen_from_rejected" type="object"
+                                string="Reopen"
+                                class="btn-secondary"
+                                invisible="onboarding_state != 'rejected'"/>
                     </header>
                     <sheet>
                         <div class="oe_button_box" name="button_box">
@@ -126,11 +135,7 @@
                         <separator string="Internal Notes"/>
                         <field name="notes" placeholder="AML/PEP findings, risk rating, comments..."/>
                     </sheet>
-                    <div class="oe_chatter">
-                        <field name="message_follower_ids"/>
-                        <field name="activity_ids"/>
-                        <field name="message_ids"/>
-                    </div>
+                    <chatter/>
                 </form>
             </field>
         </record>

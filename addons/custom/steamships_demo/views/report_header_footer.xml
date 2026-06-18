@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Steamships branded header + footer for ALL QWeb PDF reports.
+
+             Two templates:
+             1) report_steamships_css — inherits web.report_layout (has <head>)
+                to inject Steamships brand CSS variables + colored chrome.
+             2) report_steamships_layout — inherits web.external_layout_standard
+                (concrete layout) to replace the default header/footer markup
+                with Steamships-branded variants.
+
+             The PDF paperformat override is in ir_actions_report_override.xml.
+             ============================================================ -->
+
+        <!-- 1) CSS injection via web.report_layout (has <head>) -->
+        <template id="report_steamships_css"
+                  inherit_id="web.report_layout"
+                  name="Steamships Branded CSS"
+                  priority="20">
+            <xpath expr="//head" position="inside">
+                <style><![CDATA[
+                    /* Steamships brand tokens */
+                    :root {
+                        --ss-navy: #012f5c;
+                        --ss-navy-dark: #002850;
+                        --ss-gold: #fdd415;
+                        --ss-gold-dark: #ddb602;
+                        --ss-text: #444;
+                    }
+                    /* Header background */
+                    body .o_report_layout_background {
+                        background: var(--ss-navy) !important;
+                        border-bottom: 3px solid var(--ss-gold) !important;
+                    }
+                    body .o_report_layout_background .company_address,
+                    body .o_report_layout_background .company_address * {
+                        color: white !important;
+                    }
+                    /* Footer */
+                    body .o_footer {
+                        background: var(--ss-navy-dark) !important;
+                        color: white !important;
+                        border-top: 3px solid var(--ss-gold) !important;
+                    }
+                    body .o_footer *,
+                    body .o_footer .pager,
+                    body .o_footer .list-inline-item {
+                        color: white !important;
+                    }
+                    /* Watermark */
+                    body .o_report_layout_background::before {
+                        content: "STEAMSHIPS";
+                        position: absolute;
+                        top: 8px;
+                        left: 12px;
+                        color: var(--ss-gold);
+                        font-size: 18pt;
+                        font-weight: 900;
+                        letter-spacing: 2px;
+                    }
+                ]]></style>
+            </xpath>
+        </template>
+
+        <!-- 2) Header/footer override on concrete layout
+             NOTE: web.external_layout_standard does NOT have <head>,
+             so this template only overrides header + footer divs.
+             In Odoo 18, header/footer use static class names (not t-attf-class). -->
+        <template id="report_steamships_layout"
+                  inherit_id="web.external_layout_standard"
+                  name="Steamships Branded Layout"
+                  priority="20">
+
+            <!-- Replace standard header div with branded variant -->
+            <xpath expr="//div[contains(@t-attf-class, 'header') and contains(@t-attf-class, 'o_company_')]"
+                   position="replace">
+                <div t-attf-class="o_company_#{company.id}_layout header o_report_layout_background">
+                    <div class="o_report_header_inner"
+                         style="padding: 24px 12px 12px; color: white;">
+                        <div class="company_address"
+                             style="text-align: right; color: white;">
+                            <h3 style="color: var(--ss-gold); margin: 0 0 4px 0; font-weight: 700;">
+                                <span t-field="company.name">Steamships Trading Company (PNG) Ltd</span>
+                            </h3>
+                            <div style="color: white; font-size: 9pt; line-height: 1.4;">
+                                <div t-field="company.street">Champion Parade</div>
+                                <div>
+                                    <span t-field="company.city">Port Moresby</span>,
+                                    <span t-field="company.country_id.name">Papua New Guinea</span>
+                                </div>
+                                <div t-if="company.phone">
+                                    Tel: <span t-field="company.phone">+675 322 0800</span>
+                                </div>
+                                <div t-if="company.email">
+                                    Email: <span t-field="company.email">info@steamships.com.pg</span>
+                                </div>
+                                <div t-if="company.website">
+                                    Web: <span t-field="company.website">https://www.steamships.com.pg</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+
+            <!-- Replace footer with branded copyright -->
+            <xpath expr="//div[contains(@t-attf-class, 'footer') and contains(@t-attf-class, 'o_company_')]"
+                   position="replace">
+                <div t-attf-class="o_company_#{company.id}_layout footer o_footer"
+                     style="padding: 8px 12px;">
+                    <div style="display: table; width: 100%;">
+                        <div style="display: table-cell; text-align: left; width: 70%; color: white; font-size: 8pt;">
+                            © 2026 <span t-field="company.name">Steamships Trading Company (PNG) Ltd</span> — All rights reserved
+                        </div>
+                        <div style="display: table-cell; text-align: right; width: 30%; color: white; font-size: 8pt;">
+                            Page <span class="page"/> / <span class="topage"/>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+
+        </template>
+
+    </data>
+</odoo>

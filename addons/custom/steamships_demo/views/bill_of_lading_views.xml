@@ -37,6 +37,9 @@
                         <button name="action_reject" type="object"
                                 string="Reject" class="btn-danger"
                                 invisible="state in ('approved', 'rejected')"/>
+                        <button name="action_upload_scan_wizard" type="object"
+                                string="Upload Scan" class="btn-secondary"
+                                invisible="state == 'approved'"/>
                         <field name="state" widget="statusbar"
                                statusbar_visible="pending_review,approved,rejected"/>
                     </header>
@@ -54,8 +57,7 @@
                         </group>
                         <group string="Parties">
                             <field name="shipper"
-                                   decoration-danger="'shipper' in low_confidence_fields"
-                                   decoration-warning="'shipper' in low_confidence_fields"/>
+                                   decoration-danger="'shipper' in low_confidence_fields"/>
                             <field name="consignee"/>
                             <field name="notify_party"
                                    decoration-warning="'notify_party' in low_confidence_fields"/>
@@ -79,12 +81,13 @@
                                    decoration-muted="not bool(low_confidence_fields)"/>
                         </group>
                         <group string="Review" invisible="state == 'pending_review'">
-                            <field name="reviewer_id"/>
-                            <field name="reviewed_date"/>
-                            <field name="review_notes"/>
+                            <field name="state" invisible="1"/>
+                            <field name="reviewer_id" readonly="state == 'rejected'"/>
+                            <field name="reviewed_date" readonly="state == 'rejected'"/>
+                            <field name="review_notes" readonly="state == 'rejected'"/>
                         </group>
                     </sheet>
-                    <div class="oe_chatter">
+                    <div class="oe_chatter oe_chatter_aside">
                         <field name="message_follower_ids"/>
                         <field name="activity_ids"/>
                         <field name="message_ids"/>

@@ -8,5 +8,12 @@
             <field name="padding">4</field>
             <field name="company_id" ref="res_company_steamships"/>
         </record>
+        <record id="sequence_steamships_appointment" model="ir.sequence">
+            <field name="name">Steamships Appointment</field>
+            <field name="code">steamships.appointment.slot</field>
+            <field name="prefix">SS-AP/%(year)s/</field>
+            <field name="padding">4</field>
+            <field name="company_id" ref="res_company_steamships"/>
+        </record>
     </data>
 </odoo>

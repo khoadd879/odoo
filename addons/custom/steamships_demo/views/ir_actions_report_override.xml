@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================
+             Override sale.action_report_saleorder to use Steamships A4
+             paperformat (defined in data/ir_paperformat_data.xml).
+             Branded header/footer come from views/report_header_footer.xml.
+             ============================================================ -->
+        <record id="sale.action_report_saleorder" model="ir.actions.report">
+            <field name="paperformat_id" ref="steamships_demo.paperformat_steamships"/>
+        </record>
+
+    </data>
+</odoo>

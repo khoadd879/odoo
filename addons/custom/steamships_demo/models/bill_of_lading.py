@@ -1,4 +1,5 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
 
 
 class BillOfLading(models.Model):
@@ -58,13 +59,28 @@ class BillOfLading(models.Model):
 
     def action_reject(self):
         for rec in self:
+            if not rec.review_notes or not rec.review_notes.strip():
+                raise UserError(_('Rejection reason (review notes) is required.'))
             rec.write({
                 'state': 'rejected',
                 'reviewer_id': self.env.user.id,
                 'reviewed_date': fields.Datetime.now(),
             })
-            rec.message_post(body='B/L rejected.', subtype_xmlid='mail.mt_note')
+            rec.message_post(
+                body=_('B/L rejected. Reason: %s') % rec.review_notes,
+                subtype_xmlid='mail.mt_note')
 
     def action_reset_to_review(self):
         for rec in self:
             rec.write({'state': 'pending_review'})
+
+    def action_upload_scan_wizard(self):
+        """No-op wrapper. The actual upload is triggered client-side via JS
+        (static/src/js/bl_upload.js) which posts to /steamships/bl/extract.
+        This method exists so the form button has a callable action.
+        """
+        for rec in self:
+            rec.message_post(
+                body=_('B/L upload triggered. Use the file picker to attach a scan image.'),
+                subtype_xmlid='mail.mt_note')
+        return True

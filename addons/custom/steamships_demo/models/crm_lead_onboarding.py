@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import _, models, fields, api
 
 
 class CrmLeadSteamshipsOnboarding(models.Model):
@@ -86,6 +86,50 @@ class CrmLeadSteamshipsOnboarding(models.Model):
             self.lead_id.message_post(
                 body=f'Onboarding APPROVED. KYC {self.completion_pct}%. Ready to quote.',
                 subtype_xmlid='mail.mt_note')
+            # DOCX §3.1 cross-flow hook: KYC approved → CRM stage auto → Quoted
+            quoted_stage = self.env.ref(
+                'steamships_demo.stage_quoted', raise_if_not_found=False)
+            if quoted_stage and self.lead_id.stage_id != quoted_stage:
+                old_stage = self.lead_id.stage_id
+                self.lead_id.stage_id = quoted_stage
+                self.lead_id.message_post(
+                    body=_('CRM stage auto-moved from "%s" → "%s" (KYC approved).')
+                         % (old_stage.name, quoted_stage.name),
+                    subtype_xmlid='mail.mt_note')
 
     def action_reject(self):
         self.write({'onboarding_state': 'rejected'})
+
+    def action_reset_to_draft(self):
+        """Reset to draft from any state (in_progress, kyc_done, approved).
+        Allows fixing mistakes — re-runs the KYC flow from scratch."""
+        for rec in self:
+            old_state = rec.onboarding_state
+            rec.write({'onboarding_state': 'draft'})
+            rec.message_post(
+                body=_('Onboarding reset to Draft (was: %s). Reason: re-running KYC.')
+                     % old_state,
+                subtype_xmlid='mail.mt_note')
+            # If lead was auto-moved to Quoted by previous Approve, move it back.
+            if rec.lead_id and rec.lead_id.stage_id.is_won is False:
+                quoted_stage = rec.env.ref(
+                    'steamships_demo.stage_quoted', raise_if_not_found=False)
+                if (quoted_stage and rec.lead_id.stage_id == quoted_stage):
+                    onboarding_stage = rec.env.ref(
+                        'steamships_demo.stage_onboarding_docs', raise_if_not_found=False)
+                    if onboarding_stage:
+                        rec.lead_id.stage_id = onboarding_stage
+                        rec.lead_id.message_post(
+                            body=_('CRM stage auto-moved back to "%s" '
+                                   '(Onboarding reset).') % onboarding_stage.name,
+                            subtype_xmlid='mail.mt_note')
+
+    def action_reopen_from_rejected(self):
+        """Re-open a rejected onboarding: rejected -> draft."""
+        for rec in self:
+            if rec.onboarding_state != 'rejected':
+                continue
+            rec.write({'onboarding_state': 'draft'})
+            rec.message_post(
+                body=_('Onboarding reopened from Rejected.'),
+                subtype_xmlid='mail.mt_note')

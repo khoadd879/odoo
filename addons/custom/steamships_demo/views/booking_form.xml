@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Steamships Smart Booking — public form (no Enterprise)
+             Per plan §4 Day 7 Feature 5.
+             30-min and 60-min slots, PNG time GMT+10.
+             ============================================================ -->
+
+        <template id="booking_form_page" name="Steamships Smart Booking">
+            <t t-call="website.layout">
+                <head>
+                    <style>
+                        :root {
+                            --ss-navy: #012f5c;
+                            --ss-navy-dark: #002850;
+                            --ss-gold: #fdd415;
+                            --ss-text: #444;
+                        }
+                        body { background: linear-gradient(180deg, #f7f7f9 0%, #e8eef5 100%); min-height: 100vh; }
+                        .o_bk_hero {
+                            background: var(--ss-navy);
+                            color: white;
+                            padding: 32px 24px;
+                            border-radius: 0 0 8px 8px;
+                            border-bottom: 4px solid var(--ss-gold);
+                            text-align: center;
+                        }
+                        .o_bk_hero h1 { color: white; font-weight: 700; margin: 0 0 8px; }
+                        .o_bk_hero p { opacity: .9; margin: 0; }
+                        .o_bk_form {
+                            background: white;
+                            padding: 32px;
+                            border-radius: 8px;
+                            box-shadow: 0 4px 16px rgba(0,0,0,.08);
+                            max-width: 720px;
+                            margin: 32px auto;
+                        }
+                        .o_bk_form fieldset {
+                            border: 1px solid #e0e0e0;
+                            border-radius: 6px;
+                            padding: 20px 24px;
+                            margin-bottom: 20px;
+                        }
+                        .o_bk_form legend {
+                            font-size: 1.1rem;
+                            font-weight: 600;
+                            color: var(--ss-navy);
+                            padding: 0 12px;
+                        }
+                        .o_bk_form label { font-weight: 500; color: var(--ss-text); }
+                        .o_bk_form label.required:after { content: " *"; color: #CE1126; }
+                        .o_bk_slot_grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                            gap: 8px;
+                            margin-top: 8px;
+                        }
+                        .o_bk_slot {
+                            padding: 8px 12px;
+                            border: 2px solid #d0d0d0;
+                            border-radius: 6px;
+                            background: white;
+                            cursor: pointer;
+                            font-weight: 500;
+                            text-align: center;
+                            transition: all .2s;
+                        }
+                        .o_bk_slot:hover { border-color: var(--ss-navy); background: #f0f4f9; }
+                        .o_bk_slot.selected {
+                            background: var(--ss-navy);
+                            color: white;
+                            border-color: var(--ss-navy);
+                        }
+                        .o_bk_slot.disabled { opacity: .4; cursor: not-allowed; }
+                        .o_bk_submit {
+                            background: var(--ss-navy);
+                            color: white;
+                            border: 0;
+                            padding: 12px 32px;
+                            font-size: 1.05rem;
+                            font-weight: 600;
+                            border-radius: 6px;
+                        }
+                        .o_bk_submit:hover { background: var(--ss-navy-dark); }
+                        .o_bk_step_label {
+                            color: var(--ss-gold);
+                            font-weight: 700;
+                            font-size: .85rem;
+                            letter-spacing: 1px;
+                        }
+                    </style>
+                </head>
+
+                <div id="wrap" class="oe_structure">
+                    <div class="o_bk_hero">
+                        <div style="font-size: 1.6rem; font-weight: 700; letter-spacing: 2px;">
+                            STEAMSHIPS
+                        </div>
+                        <h1>Book a Meeting</h1>
+                        <p>30 or 60 minutes with our sales team. PNG time (GMT+10).</p>
+                    </div>
+
+                    <div class="o_bk_form" id="o_bk_form">
+                        <div t-if="error" class="alert alert-danger">
+                            <strong>Please correct:</strong> <t t-esc="error"/>
+                        </div>
+
+                        <form action="/booking/submit" method="post" class="o_bk_form_inner">
+                            <fieldset>
+                                <legend><span class="o_bk_step_label">STEP 1</span> · Choose appointment type</legend>
+                                <div class="mb-3">
+                                    <label class="form-label required">Type</label>
+                                    <select name="appointment_type" class="form-select" required="required" id="o_bk_type">
+                                        <option value="sales_call">Sales Call (30 min)</option>
+                                        <option value="onboarding">Client Onboarding (60 min)</option>
+                                        <option value="demo">Product Demo (60 min)</option>
+                                    </select>
+                                </div>
+                            </fieldset>
+
+                            <fieldset>
+                                <legend><span class="o_bk_step_label">STEP 2</span> · Pick a date</legend>
+                                <div class="mb-3">
+                                    <label class="form-label required">Date</label>
+                                    <select name="date" class="form-select" required="required" id="o_bk_date">
+                                        <option value="">— Select a date —</option>
+                                        <option t-foreach="date_options" t-as="d"
+                                                t-att-value="d['value']">
+                                            <t t-esc="d['label']"/>
+                                        </option>
+                                    </select>
+                                </div>
+                            </fieldset>
+
+                            <fieldset>
+                                <legend><span class="o_bk_step_label">STEP 3</span> · Pick a time slot (PNG time)</legend>
+                                <div class="mb-3">
+                                    <label class="form-label">Time slots (30-min, 09:00 – 17:00)</label>
+                                    <div class="o_bk_slot_grid" id="o_bk_slot_grid">
+                                        <div t-foreach="sample_slots" t-as="s" class="o_bk_slot"
+                                             t-att-data-start="s['iso']"
+                                             t-on-click="onSlotClick">
+                                            <t t-esc="s['label']"/>
+                                        </div>
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        60-min slots must start on the hour. Click a slot to select.
+                                    </small>
+                                </div>
+                                <input type="hidden" name="start_datetime" id="o_bk_start" required="required"/>
+                                <input type="hidden" name="duration_minutes" id="o_bk_duration" value="30"/>
+                            </fieldset>
+
+                            <fieldset>
+                                <legend><span class="o_bk_step_label">STEP 4</span> · Your contact details</legend>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label required">Full name</label>
+                                        <input type="text" name="partner_name" class="form-control"
+                                               required="required" placeholder="Jane Doe"/>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label required">Email</label>
+                                        <input type="email" name="partner_email" class="form-control"
+                                               required="required" placeholder="jane@company.pg"/>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Phone</label>
+                                        <input type="tel" name="partner_phone" class="form-control"
+                                               placeholder="+675 ..."/>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Preferred host</label>
+                                        <select name="assigned_user_id" class="form-select">
+                                            <option value="">Any sales rep</option>
+                                            <option t-foreach="users" t-as="u"
+                                                    t-att-value="u.id">
+                                                <t t-esc="u.name"/>
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">What do you want to discuss?</label>
+                                    <textarea name="notes" class="form-control" rows="3"
+                                              placeholder="e.g. FCL shipping quote for 40ft containers, monthly contract..."></textarea>
+                                </div>
+                            </fieldset>
+
+                            <div class="d-flex justify-content-between align-items-center mt-4">
+                                <a href="/" class="btn btn-link">Cancel</a>
+                                <div>
+                                    <button type="submit" name="auto_confirm" value="0"
+                                            class="btn btn-secondary">
+                                        Save draft
+                                    </button>
+                                    <button type="submit" name="auto_confirm" value="1"
+                                            class="o_bk_submit">
+                                        Confirm booking
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <script>
+                //<![CDATA[
+                (function () {
+                    'use strict';
+                    var dateSel = document.getElementById('o_bk_date');
+                    var slotGrid = document.getElementById('o_bk_slot_grid');
+                    var startInput = document.getElementById('o_bk_start');
+                    var durationInput = document.getElementById('o_bk_duration');
+                    var typeSel = document.getElementById('o_bk_type');
+
+                    // Re-fetch slots when date changes
+                    function fetchSlots() {
+                        var date = dateSel.value;
+                        var type = typeSel.value;
+                        var duration = (type === 'sales_call') ? 30 : 60;
+                        durationInput.value = String(duration);
+                        if (!date) {
+                            slotGrid.innerHTML = '<small class="text-muted">Pick a date first.</small>';
+                            return;
+                        }
+                        slotGrid.innerHTML = '<small class="text-muted">Loading...</small>';
+                        fetch('/booking/api/available', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                params: {
+                                    date_from: date,
+                                    date_to: date,
+                                    duration: duration,
+                                },
+                            }),
+                        }).then(function (r) { return r.json(); })
+                          .then(function (j) {
+                            var slots = (j && j.result) || [];
+                            if (!slots.length) {
+                                slotGrid.innerHTML = '<small class="text-muted">No slots available — try another date.</small>';
+                                return;
+                            }
+                            slotGrid.innerHTML = slots.map(function (s) {
+                                return '<div class="o_bk_slot" data-start="' + s.start + '">' + s.label + '</div>';
+                            }).join('');
+                            // Re-bind click handlers
+                            Array.prototype.forEach.call(
+                                slotGrid.querySelectorAll('.o_bk_slot'),
+                                function (el) {
+                                    el.addEventListener('click', function () {
+                                        Array.prototype.forEach.call(
+                                            slotGrid.querySelectorAll('.o_bk_slot'),
+                                            function (x) { x.classList.remove('selected'); });
+                                        el.classList.add('selected');
+                                        startInput.value = el.dataset.start;
+                                    });
+                                });
+                          })
+                          .catch(function (e) {
+                              slotGrid.innerHTML = '<small class="text-danger">Error loading slots.</small>';
+                          });
+                    }
+                    if (dateSel) dateSel.addEventListener('change', fetchSlots);
+                    if (typeSel) typeSel.addEventListener('change', fetchSlots);
+                    // Bind initial sample slots
+                    Array.prototype.forEach.call(
+                        document.querySelectorAll('#o_bk_slot_grid .o_bk_slot'),
+                        function (el) {
+                            el.addEventListener('click', function () {
+                                Array.prototype.forEach.call(
+                                    document.querySelectorAll('#o_bk_slot_grid .o_bk_slot'),
+                                    function (x) { x.classList.remove('selected'); });
+                                el.classList.add('selected');
+                                startInput.value = el.dataset.start;
+                            });
+                        });
+                })();
+                //]]>
+                </script>
+            </t>
+        </template>
+
+        <!-- ============================================================
+             Booking thank-you / confirmation page
+             ============================================================ -->
+        <template id="booking_thanks" name="Steamships Booking Confirmation">
+            <t t-call="website.layout">
+                <head>
+                    <style>
+                        :root { --ss-navy: #012f5c; --ss-gold: #fdd415; }
+                        .o_bk_done { background: var(--ss-navy); color: white;
+                                     padding: 32px; border-radius: 8px 8px 0 0;
+                                     border-bottom: 4px solid var(--ss-gold);
+                                     text-align: center; }
+                        .o_bk_done h1 { color: white; margin: 0; }
+                        .o_bk_card { background: white; padding: 32px; max-width: 600px;
+                                     margin: 0 auto; border-radius: 0 0 8px 8px; }
+                    </style>
+                </head>
+                <div class="oe_structure">
+                    <div class="o_bk_done">
+                        <h1 t-if="slot.state == 'confirmed'">✓ Booking Confirmed</h1>
+                        <h1 t-else="">⏳ Booking Received</h1>
+                    </div>
+                    <div class="o_bk_card">
+                        <p>Hello <strong t-esc="slot.partner_name"/>!</p>
+                        <p t-if="slot.state == 'confirmed'">
+                            Your booking has been confirmed.
+                            <t t-if="slot.confirmation_token">
+                                <a t-att-href="'/booking/calendar/%s' % slot.confirmation_token"
+                                   class="btn btn-sm btn-outline-primary ms-2">
+                                    <i class="fa fa-calendar"/> Download .ics
+                                </a>
+                            </t>
+                        </p>
+                        <p t-else="">
+                            Your booking is pending staff confirmation. We'll email you shortly.
+                        </p>
+                        <table class="table mt-3">
+                            <tr><th>Reference</th><td><t t-esc="slot.name"/></td></tr>
+                            <tr><th>Type</th><td><t t-esc="dict(slot._fields['appointment_type'].selection).get(slot.appointment_type)"/></td></tr>
+                            <tr><th>Date / Time</th><td><t t-esc="slot.start_datetime"/> (PNG GMT+10)</td></tr>
+                            <tr><th>Duration</th><td><t t-esc="slot.duration_minutes"/> minutes</td></tr>
+                            <tr><th>Host</th><td><t t-esc="slot.assigned_user_id.name or 'TBD'"/></td></tr>
+                        </table>
+                        <a href="/" class="btn btn-secondary">Back to home</a>
+                    </div>
+                </div>
+            </t>
+        </template>
+
+    </data>
+</odoo>

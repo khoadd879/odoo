@@ -1,16 +1,17 @@
 /** @odoo-module **/
-/* Steamships AI Chat Widget — Odoo 18 OWL component.
-   Registered as client action tag: 'steamships_ai_chat'.
-   Wired in views/chat_widget_views.xml (ir.actions.client tag=...).
+/* Steamships AI popup dialog (Phase A).
+   REVERTED to pre-History state for debugging hang.
 */
 
 import { Component, useState, useRef, onMounted } from "@odoo/owl";
-import { registry } from "@web/core/registry";
+import { Dialog } from "@web/core/dialog/dialog";
 
 const STORAGE_KEY = "ssc_mode";
 
-class SteamshipsChatWidget extends Component {
-    static template = "steamships_demo.ChatWidget";
+export class SteamshipsAIDialog extends Component {
+    static components = { Dialog };
+    static props = ["*"];
+    static template = "steamships_demo.AIDialog";
 
     setup() {
         this.logRef = useRef("log");
@@ -51,6 +52,16 @@ class SteamshipsChatWidget extends Component {
         try { localStorage.setItem(STORAGE_KEY, this.state.mode); } catch (_) { /* ignore */ }
     }
 
+    _pushBot(text, sources) {
+        this.state.messages.push({
+            id: this.state._nextId++,
+            role: "assistant",
+            content: text,
+            sources: sources || [],
+        });
+        this._scrollToBottom();
+    }
+
     switchStaff() {
         if (this.state.mode === "staff") return;
         this.state.mode = "staff";
@@ -63,16 +74,6 @@ class SteamshipsChatWidget extends Component {
         this.state.mode = "client";
         this._persistMode();
         this._pushBot("(switched to CLIENT mode — onboarding help only, no prices or internal SOPs)");
-    }
-
-    _pushBot(text, sources) {
-        this.state.messages.push({
-            id: this.state._nextId++,
-            role: "assistant",
-            content: text,
-            sources: sources || [],
-        });
-        this._scrollToBottom();
     }
 
     onKey(ev) {
@@ -97,7 +98,6 @@ class SteamshipsChatWidget extends Component {
         this._scrollToBottom();
 
         try {
-            // Direct fetch — useService("rpc") is not available in client-action scope.
             const res = await fetch("/steamships/chat/api", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
@@ -121,6 +121,3 @@ class SteamshipsChatWidget extends Component {
         }
     }
 }
-
-// Register as client action so the menu's ir.actions.client (tag=steamships_ai_chat) can find it.
-registry.category("actions").add("steamships_ai_chat", SteamshipsChatWidget);

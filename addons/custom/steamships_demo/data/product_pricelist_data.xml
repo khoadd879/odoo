@@ -18,6 +18,20 @@
             <field name="company_id" ref="res_company_steamships"/>
         </record>
 
+        <!-- Contract customer list: −10% off list (auto apply per DOCX Day 2) -->
+        <record id="pricelist_pgk_contract" model="product.pricelist">
+            <field name="name">PGK Contract (signed customers)</field>
+            <field name="currency_id" ref="base.PGK"/>
+            <field name="company_id" ref="res_company_steamships"/>
+        </record>
+
+        <!-- Joint Venture list: −15% off list, requires manager approval (DOCX Day 2) -->
+        <record id="pricelist_pgk_jv" model="product.pricelist">
+            <field name="name">PGK Joint Venture (approval required)</field>
+            <field name="currency_id" ref="base.PGK"/>
+            <field name="company_id" ref="res_company_steamships"/>
+        </record>
+
         <!-- USD Corporate = 10% lower than PGK list (in PGK base) -->
         <record model="product.pricelist.item" id="pricelist_item_usd_fcl20">
             <field name="pricelist_id" ref="pricelist_usd_corporate"/>
@@ -76,6 +90,101 @@
             <field name="compute_price">formula</field>
             <field name="base">list_price</field>
             <field name="price_discount">10</field>
+        </record>
+
+        <!-- Contract list: 10% off all services (auto apply for signed customers) -->
+        <record model="product.pricelist.item" id="pricelist_item_contract_fcl20">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_fcl_20"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_fcl40">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_fcl_40"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_lcl">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_lcl"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_stev">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_stevedoring"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_offa">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_office_a"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_whse">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_warehouse"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_stdroom">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_std_room"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_contract_suite">
+            <field name="pricelist_id" ref="pricelist_pgk_contract"/>
+            <field name="product_id" ref="product_suite_room"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">10</field>
+        </record>
+
+        <!-- Joint Venture list: 15% off (requires approval per DOCX Day 2 #5) -->
+        <record model="product.pricelist.item" id="pricelist_item_jv_fcl20">
+            <field name="pricelist_id" ref="pricelist_pgk_jv"/>
+            <field name="product_id" ref="product_fcl_20"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">15</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_jv_fcl40">
+            <field name="pricelist_id" ref="pricelist_pgk_jv"/>
+            <field name="product_id" ref="product_fcl_40"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">15</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_jv_offa">
+            <field name="pricelist_id" ref="pricelist_pgk_jv"/>
+            <field name="product_id" ref="product_office_a"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">15</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_jv_suite">
+            <field name="pricelist_id" ref="pricelist_pgk_jv"/>
+            <field name="product_id" ref="product_suite_room"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">15</field>
+        </record>
+        <record model="product.pricelist.item" id="pricelist_item_jv_conf">
+            <field name="pricelist_id" ref="pricelist_pgk_jv"/>
+            <field name="product_id" ref="product_conference"/>
+            <field name="compute_price">formula</field>
+            <field name="base">list_price</field>
+            <field name="price_discount">15</field>
         </record>
 
     </data>

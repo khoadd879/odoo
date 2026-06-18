@@ -65,12 +65,21 @@
                   action="action_sale_order_approval_request"
                   sequence="20"/>
 
+        <menuitem id="menu_steamships_appointments"
+                  name="Appointments"
+                  parent="menu_steamships_sales"
+                  action="action_steamships_appointment_slot"
+                  sequence="30"/>
+
         <menuitem id="menu_steamships_onboarding"
                   name="Customer Onboardings"
                   parent="menu_steamships_master"
                   action="action_crm_lead_steamships_onboarding"
                   sequence="40"/>
 
+        <!--
+        AI Assistant menus disabled in Phase B — replaced by systray icon.
+        Keep XML commented for reference; not loaded into DB.
         <menuitem id="menu_steamships_ai_root"
                   name="AI Assistant"
                   parent="menu_steamships_root"
@@ -87,6 +96,7 @@
                   parent="menu_steamships_ai_root"
                   action="action_steamships_ai_chat_log"
                   sequence="20"/>
+        -->
 
     </data>
 </odoo>

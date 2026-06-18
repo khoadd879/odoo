@@ -1,4 +1,5 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
 
 
 class SteamshipsDivision(models.Model):
@@ -18,6 +19,16 @@ class SteamshipsDivision(models.Model):
     _sql_constraints = [
         ('code_unique', 'UNIQUE(code)', 'Division code must be unique.'),
     ]
+
+    @api.constrains('name')
+    def _check_name_not_empty(self):
+        """B1 fix: translate=True stores jsonb, bypasses required=True.
+        Validate that at least one translation has a non-empty name."""
+        for rec in self:
+            if not rec.name or not any(
+                v and str(v).strip() for v in rec.name.values()
+            ) if isinstance(rec.name, dict) else not (rec.name and rec.name.strip()):
+                raise ValidationError(_('Division name cannot be empty.'))
 
     def _compute_branch_count(self):
         for div in self:

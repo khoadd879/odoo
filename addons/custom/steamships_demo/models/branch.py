@@ -1,4 +1,5 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
 
 
 class SteamshipsBranch(models.Model):
@@ -18,3 +19,12 @@ class SteamshipsBranch(models.Model):
     _sql_constraints = [
         ('code_unique', 'UNIQUE(code, company_id)', 'Branch code must be unique per company.'),
     ]
+
+    @api.constrains('name')
+    def _check_name_not_empty(self):
+        """B1 fix: translate=True stores jsonb, bypasses required=True."""
+        for rec in self:
+            if not rec.name or not any(
+                v and str(v).strip() for v in rec.name.values()
+            ) if isinstance(rec.name, dict) else not (rec.name and rec.name.strip()):
+                raise ValidationError(_('Branch name cannot be empty.'))

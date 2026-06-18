@@ -260,6 +260,45 @@ addons/custom/steamships_demo/
 }
 ```
 
+## 3.3 Actual current state (post-implementation)
+
+The file tree in 3.1 lists the *initial plan*. After the gap-fill implementation
+(see `docs/superpowers/plans/2026-06-16-steamships-missing-features.md`),
+the live files in `addons/custom/steamships_demo/` are:
+
+**Models (2 added, 5 existing):**
+- `bill_of_lading.py` (Feature 4b)
+- `chatbot_session.py` (Feature 3 — also defines `steamships.chatbot.line`)
+
+**Data (1 added, 11 existing):**
+- `sample_bl_scans.xml` (5 sample B/L records, noupdate=1)
+
+**Views (1 added, 10 existing):**
+- `bill_of_lading_views.xml` (Feature 4b)
+
+**Controllers (1 added, 2 existing):**
+- `bl_extract.py` (Feature 4b — Groq Llama 4 Scout vision + stub fallback)
+
+**Backend menu items added:**
+- Bills of Lading (sequence 50)
+
+**AI / RAG stack (Feature 3):**
+- Single `GROQ_API_KEY` env var feeds both chat (`llama-3.3-70b-versatile`) and vision (`meta-llama/llama-4-scout-17b-16e-instruct`).
+- Chatbot persists to `steamships.chatbot.session` + `steamships.chatbot.line`.
+- 15 SOPs in `mock_sops.py` (keyword scoring, each carries `confidence` 0.88–0.96).
+
+**Feature 5 status (per B6 spec):**
+- Spec calls for Odoo **Appointments** Enterprise app + Google Calendar OAuth.
+- **NOT YET CONFIGURED** — requires Enterprise modules (`appointment`, `google_calendar`) and Google OAuth credentials. Out of scope for current build; will be configured when Enterprise is provisioned.
+
+**Cut from plan (per line 107):**
+- `middleware/fastapi_app/` — NOT built. RAG stays in-process.
+- `pgvector`/`Chroma` — NOT used. Keyword scoring in `mock_sops.py`.
+- `documents` (Enterprise) — NOT installed. Files use `ir.attachment`.
+- `account_invoice_extract` (Enterprise) — NOT installed.
+- `appointment` (Enterprise) — NOT installed yet. **Will use Odoo's native Appointments app per B6 spec** (not custom-built).
+- `shipment.py`, `property_lease.py`, `jv_partner.py` — NOT built (out of 1-week scope).
+
 ---
 
 ## 4. Implementation plan theo 7-day timeline (DOCX B7)

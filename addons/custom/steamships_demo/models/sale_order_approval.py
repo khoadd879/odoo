@@ -72,6 +72,12 @@ class SaleOrder(models.Model):
         string='Total discount',
         compute='_compute_discount_stats', store=True,
     )
+    x_internal_margin_pct = fields.Float(
+        string='Internal margin %',
+        compute='_compute_internal_margin', store=True,
+        help="Margin = (revenue - cost) / revenue * 100. "
+             "Cost is product.standard_price. NOT shown on PDF.",
+    )
     approval_request_ids = fields.One2many('sale.order.approval.request', 'order_id')
     approval_state = fields.Selection([
         ('not_required', 'Not required'),
@@ -96,6 +102,22 @@ class SaleOrder(models.Model):
                     disc_total += max(0.0, line_list - line.price_subtotal)
             order.x_discount_amount = disc_total
             order.x_discount_pct = (disc_total / list_total * 100.0) if list_total else 0.0
+
+    @api.depends('order_line.price_subtotal', 'order_line.product_id',
+                 'order_line.product_uom_qty')
+    def _compute_internal_margin(self):
+        for order in self:
+            revenue = 0.0
+            cost = 0.0
+            for line in order.order_line:
+                if not line.product_id or not line.product_uom_qty:
+                    continue
+                revenue += line.price_subtotal
+                cost += (line.product_id.standard_price or 0.0) * line.product_uom_qty
+            if revenue:
+                order.x_internal_margin_pct = (revenue - cost) / revenue * 100.0
+            else:
+                order.x_internal_margin_pct = 0.0
 
     @api.depends('x_discount_pct', 'x_discount_approved', 'approval_request_ids.state')
     def _compute_approval_state(self):
@@ -139,4 +161,21 @@ class SaleOrder(models.Model):
                     'Discount %.1f%% exceeds threshold %.1f%%. '
                     'Request approval before confirming.') % (
                         order.x_discount_pct, APPROVAL_THRESHOLD_PCT))
-        return super().action_confirm()
+        result = super().action_confirm()
+        # Phase 1.4: auto-mark opportunity as Won after successful confirm
+        for order in self:
+            opp = order.opportunity_id
+            if opp and opp.type == 'opportunity' and not opp.stage_id.is_won:
+                won_stage = opp._find_won_stage() if hasattr(opp, '_find_won_stage') else None
+                # Use the explicit stage_won xmlid
+                if not won_stage:
+                    won_stage = self.env.ref(
+                        'steamships_demo.stage_won', raise_if_not_found=False)
+                if won_stage and opp.stage_id != won_stage:
+                    old_stage_name = opp.stage_id.name
+                    opp.write({'stage_id': won_stage.id, 'probability': 100.0})
+                    opp.message_post(
+                        body=_('CRM stage auto-moved "%s" → "%s" (sale order confirmed).')
+                             % (old_stage_name, won_stage.name),
+                        subtype_xmlid='mail.mt_note')
+        return result
