@@ -3,14 +3,14 @@ Bill of Lading vision extraction endpoint.
 
 Per DOCX B5: image/PDF upload → AI vision → JSON → B/L record.
 
-Two modes:
-  - GROQ_API_KEY set  → call Groq Llama 3.2 90B Vision (real extraction)
-  - no key            → return canned stub data (deterministic per filename
-                        hash) so the demo works without API access
+Provider chain:
+  1. GROQ_API_KEY set     → Groq llama-4-scout (primary, best B/L semantics)
+  2. OPENROUTER_API_KEY   → OpenRouter free models (3-model fallback)
+  3. No keys              → deterministic stub data (canned responses)
 
-Groq is OpenAI-compatible. We use stdlib `requests` — no extra deps.
-Docs: https://console.groq.com/docs/overview
-Model: llama-3.2-90b-vision-preview
+Both providers are OpenAI-compatible. We use stdlib `requests` — no extra deps.
+Docs: https://console.groq.com/docs  |  https://openrouter.ai/docs
+See docs/openrouter-ocr-comparison.md for selection rationale.
 """
 import base64
 import hashlib
@@ -25,9 +25,24 @@ from odoo.http import request
 
 _logger = logging.getLogger(__name__)
 
+# Primary: Groq (best quality for B/L semantics, confidence calibration, null-on-uncertain)
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip()
-GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'  # was llama-3.2-90b-vision-preview (decommissioned)
+GROQ_VISION_MODEL = os.environ.get(
+    'GROQ_VISION_MODEL', 'meta-llama/llama-4-scout-17b-16e-instruct'
+).strip()
 GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+# Fallback: OpenRouter free models (3-model chain)
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '').strip()
+OCR_FALLBACK_MODELS = [
+    m.strip() for m in os.environ.get(
+        'OCR_FALLBACK_MODELS',
+        'nvidia/nemotron-nano-12b-v2-vl:free,'
+        'nex-agi/nex-n2-pro:free,'
+        'google/gemma-4-31b-it:free',
+    ).split(',') if m.strip()
+]
+OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 # Strict JSON schema prompt — ask model to return ONLY this shape.
 _EXTRACTION_PROMPT = """You are an OCR assistant for shipping Bills of Lading.
@@ -56,7 +71,7 @@ Required JSON shape:
 Return ONLY the JSON object. No commentary, no markdown fences."""
 
 
-# Canned fallback (no GROQ_API_KEY) — deterministic per filename hash.
+# Canned fallback (no API keys) — deterministic per filename hash.
 _DEMO_RESPONSES = [
     {  # 0 — clean
         'name': 'PNG-LAE-2026-0501', 'shipper': 'Madang Fisheries Ltd',
@@ -82,9 +97,10 @@ _DEMO_RESPONSES = [
 
 
 def _call_groq_vision(image_bytes, mime_type='image/jpeg'):
-    """Call Groq Llama 3.2 90B Vision, return parsed JSON dict.
+    """Call Groq llama-4-scout vision, return parsed JSON dict.
 
-    Raises requests.HTTPError on API failure.
+    Raises requests.HTTPError on API failure, KeyError on malformed response,
+    json.JSONDecodeError if the model returns non-JSON text.
     """
     b64 = base64.b64encode(image_bytes).decode('ascii')
     data_url = f"data:{mime_type};base64,{b64}"
@@ -120,6 +136,76 @@ def _call_groq_vision(image_bytes, mime_type='image/jpeg'):
     return json.loads(text)
 
 
+def _call_openrouter_vision(model, image_bytes, mime_type='image/jpeg'):
+    """Call OpenRouter vision model, return parsed JSON dict.
+
+    Raises requests.HTTPError on API failure, KeyError on malformed response,
+    json.JSONDecodeError if the model returns non-JSON text.
+    """
+    b64 = base64.b64encode(image_bytes).decode('ascii')
+    data_url = f"data:{mime_type};base64,{b64}"
+    payload = {
+        'model': model,
+        'messages': [{
+            'role': 'user',
+            'content': [
+                {'type': 'text', 'text': _EXTRACTION_PROMPT},
+                {'type': 'image_url', 'image_url': {'url': data_url}},
+            ],
+        }],
+        'temperature': 0.0,
+        'max_tokens': 1024,
+    }
+    resp = requests.post(
+        OPENROUTER_URL,
+        json=payload,
+        headers={
+            'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+            'Content-Type': 'application/json',
+            # OpenRouter recommended headers (used for ranking + abuse tracing)
+            'HTTP-Referer': 'https://steamships.local',
+            'X-Title': 'Steamships B/L OCR',
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    text = resp.json()['choices'][0]['message']['content'].strip()
+    # Strip markdown fences if model added them.
+    if text.startswith('```'):
+        text = text.split('```', 2)[1]
+        if text.startswith('json'):
+            text = text[4:]
+        text = text.strip().rstrip('`').strip()
+    return json.loads(text)
+
+
+def _call_with_fallback(image_bytes, mime_type):
+    """Multi-provider fallback chain: Groq → OpenRouter chain.
+
+    Returns (parsed_dict, {'provider': 'groq'|'openrouter', 'model': <model_id>}).
+    Raises the last error if every model fails.
+    """
+    chain = []
+    if GROQ_API_KEY:
+        chain.append(('groq', GROQ_VISION_MODEL, _call_groq_vision))
+    for model in OCR_FALLBACK_MODELS:
+        if OPENROUTER_API_KEY:
+            chain.append(('openrouter', model, _call_openrouter_vision))
+
+    last_err = None
+    for provider, model, fn in chain:
+        try:
+            if provider == 'groq':
+                parsed = fn(image_bytes, mime_type)
+            else:
+                parsed = fn(model, image_bytes, mime_type)
+            return parsed, {'provider': provider, 'model': model}
+        except Exception as e:
+            _logger.warning('%s model %s failed: %s', provider, model, e)
+            last_err = e
+    raise last_err
+
+
 class BLExtract(http.Controller):
 
     @http.route('/steamships/bl/extract', type='http', auth='user',
@@ -127,8 +213,10 @@ class BLExtract(http.Controller):
     def extract(self, **post):
         """Receive a B/L scan (multipart form), return JSON.
 
-        If GROQ_API_KEY is set, calls Llama 3.2 90B Vision.
-        Otherwise returns deterministic canned data.
+        Provider chain:
+          - Groq (if GROQ_API_KEY) → primary
+          - OpenRouter (if OPENROUTER_API_KEY) → fallback chain
+          - Neither set → deterministic stub data
 
         If `create=1` in the form, also creates a bill.of.lading record.
         """
@@ -143,13 +231,18 @@ class BLExtract(http.Controller):
         source_filename = upload.filename
         mime = upload.mimetype or 'image/jpeg'
 
-        if GROQ_API_KEY:
+        if GROQ_API_KEY or OPENROUTER_API_KEY:
             try:
-                extracted = _call_groq_vision(raw, mime_type=mime)
-                extracted['source'] = 'groq_llama_3.2_90b_vision'
+                extracted, info = _call_with_fallback(raw, mime_type=mime)
+                provider = info['provider']
+                model = info['model']
+                short = model.split('/')[-1].replace(':', '_').replace('.', '_')
+                extracted['source'] = f'{provider}_{short}'
+                extracted['__provider_used__'] = provider
+                extracted['__model_used__'] = model
             except Exception as e:
-                _logger.exception('Groq vision call failed, falling back to stub')
-                extracted = {'error': f'groq_failed: {e}', 'fallback': 'stub'}
+                _logger.exception('All OCR providers failed, falling back to stub')
+                extracted = {'error': f'all_providers_failed: {e}', 'fallback': 'stub'}
         else:
             digest = hashlib.md5(source_filename.encode()).digest()
             idx = digest[0] % len(_DEMO_RESPONSES)
@@ -158,6 +251,7 @@ class BLExtract(http.Controller):
 
         extracted['source_scan_filename'] = source_filename
         extracted['groq_enabled'] = bool(GROQ_API_KEY)
+        extracted['openrouter_enabled'] = bool(OPENROUTER_API_KEY)
 
         if post.get('create') == '1' and 'error' not in extracted:
             low_conf = extracted.get('low_confidence_fields') or []

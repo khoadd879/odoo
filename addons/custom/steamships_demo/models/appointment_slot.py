@@ -108,13 +108,16 @@ class SteamshipsAppointmentSlot(models.Model):
         for rec in self:
             if not rec.start_datetime:
                 continue
-            # start_datetime is stored in UTC in Odoo, but we treat it as PNG wall clock
-            # (we use a fixed offset approach, see _generate_ics).
-            # For business hours check, we look at the hour component directly.
+            # Convention: start_datetime is naive PNG wall clock (GMT+10, no DST).
+            # Odoo Datetime field stores naive values in DB; we intentionally treat
+            # the stored value as PNG time for this check. UTC-stored values
+            # (e.g. 23:00) would fail this check, which is the desired behavior
+            # for the booking flow — submit handler always normalizes to PNG.
             local_hour = rec.start_datetime.hour
             if local_hour < WORK_START_HOUR or local_hour >= WORK_END_HOUR:
-                raise ValidationError(
-                    _('Slot must start between 09:00 and 17:00 (PNG time).'))
+                raise ValidationError(_(
+                    'Slot must start between 09:00 and 17:00 (PNG time). '
+                    'Got: %02d:00' % local_hour))
 
     @api.constrains('start_datetime', 'assigned_user_id', 'state')
     def _check_no_double_booking(self):

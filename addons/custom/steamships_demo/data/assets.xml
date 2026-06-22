@@ -31,10 +31,5 @@
             <field name="bundle">web.assets_backend</field>
             <field name="path">steamships_demo/static/src/js/bl_upload.js</field>
         </record>
-        <record id="asset_steamships_form_css" model="ir.asset">
-            <field name="name">Steamships Form Layout CSS</field>
-            <field name="bundle">web.assets_web</field>
-            <field name="path">steamships_demo/static/src/css/form_layout.css</field>
-        </record>
     </data>
 </odoo>

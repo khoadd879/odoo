@@ -49,49 +49,47 @@
                                 <field name="name" placeholder="B/L Number"/>
                             </h1>
                         </div>
-                        <group col="4">
+                        <group col="2">
                             <field name="bl_date"/>
-                            <field name="confidence_score" widget="float_percent"/>
+                            <field name="confidence_score" widget="percentage"/>
                             <field name="vessel_name"/>
                             <field name="voyage_number"/>
-                        </group>
-                        <group string="Parties">
+                            <separator string="Parties" colspan="2"/>
                             <field name="shipper"
                                    decoration-danger="'shipper' in low_confidence_fields"/>
                             <field name="consignee"/>
                             <field name="notify_party"
                                    decoration-warning="'notify_party' in low_confidence_fields"/>
-                        </group>
-                        <group string="Route">
+                            <separator string="Route" colspan="2"/>
                             <field name="port_of_loading"/>
                             <field name="port_of_discharge"/>
-                        </group>
-                        <group string="Cargo">
+                            <separator string="Cargo" colspan="2"/>
                             <field name="container_numbers"
                                    decoration-warning="'container_numbers' in low_confidence_fields"/>
                             <field name="cargo_description"/>
                             <field name="gross_weight_kg"
                                    decoration-warning="'gross_weight_kg' in low_confidence_fields"/>
-                        </group>
-                        <group string="AI Extraction Metadata">
+                            <separator string="AI Extraction Metadata" colspan="2"/>
                             <field name="source_scan_filename"/>
-                            <field name="source_attachment_id" widget="many2one_binary"/>
+                            <field name="source_attachment_id" widget="binary"/>
                             <field name="low_confidence_fields"
                                    decoration-danger="bool(low_confidence_fields)"
                                    decoration-muted="not bool(low_confidence_fields)"/>
                         </group>
-                        <group string="Review" invisible="state == 'pending_review'">
-                            <field name="state" invisible="1"/>
-                            <field name="reviewer_id" readonly="state == 'rejected'"/>
-                            <field name="reviewed_date" readonly="state == 'rejected'"/>
-                            <field name="review_notes" readonly="state == 'rejected'"/>
-                        </group>
+                        <notebook>
+                            <page string="Review" name="review"
+                                  invisible="state == 'pending_review'">
+                                <group>
+                                    <field name="state" invisible="1"/>
+                                    <field name="reviewer_id" readonly="state == 'rejected'"/>
+                                    <field name="reviewed_date" readonly="state == 'rejected'"/>
+                                    <field name="review_notes" readonly="state == 'rejected'"
+                                           nolabel="1"/>
+                                </group>
+                            </page>
+                        </notebook>
                     </sheet>
-                    <div class="oe_chatter oe_chatter_aside">
-                        <field name="message_follower_ids"/>
-                        <field name="activity_ids"/>
-                        <field name="message_ids"/>
-                    </div>
+                    <chatter/>
                 </form>
             </field>
         </record>

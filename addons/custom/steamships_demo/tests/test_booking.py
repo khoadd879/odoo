@@ -58,6 +58,41 @@ class TestBookingSlot(TransactionCase):
         with self.assertRaises(Exception):
             self._make_slot(start_datetime=early, partner_name='Early Bird')
 
+    def test_png_9am_slot_passes(self):
+        """09:00 PNG wall clock should pass working hours check (regression)."""
+        slot = self._make_slot(
+            start_datetime=self.future_start.replace(hour=9, minute=0),
+            partner_name='9am Visitor',
+        )
+        self.assertEqual(slot.state, 'pending')
+
+    def test_png_8am_blocked(self):
+        """08:00 PNG should fail working hours check (regression)."""
+        with self.assertRaises(Exception):
+            self._make_slot(
+                start_datetime=self.future_start.replace(hour=8),
+                partner_name='Early Bird 8am',
+            )
+
+    def test_png_17_boundary_blocked(self):
+        """17:00 PNG is outside 09:00-17:00 (boundary)."""
+        with self.assertRaises(Exception):
+            self._make_slot(
+                start_datetime=self.future_start.replace(hour=17),
+                partner_name='17:00 Visitor',
+            )
+
+    def test_png_1659_last_valid(self):
+        """16:59 PNG is inside 09:00-17:00 (last valid)."""
+        # Note: start_datetime at 16:59 with 30-min duration would end at 17:29
+        # which crosses 17:00 boundary. We only check start, not end, per current
+        # business rule. Verify start check passes.
+        slot = self._make_slot(
+            start_datetime=self.future_start.replace(hour=16, minute=59),
+            partner_name='Late Visitor',
+        )
+        self.assertEqual(slot.state, 'pending')
+
     def test_no_double_booking(self):
         slot = self._make_slot()
         # Try to book another slot at same time with same user
