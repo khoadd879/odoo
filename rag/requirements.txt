@@ -1,0 +1,13 @@
+# Pinned for reproducibility (Day 3 RAG pipeline).
+# Chroma 0.5.x supports PersistentClient + the where-filter we need for the
+# STAFF/CLIENT visibility split.
+chromadb==0.5.5
+# sentence-transformers 3.x with the bundled all-MiniLM-L6-v2 (384 dims).
+sentence-transformers==3.1.1
+# FastAPI + uvicorn for the retrieval API.
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+# pydantic v2 for request/response schemas.
+pydantic==2.9.2
+# markdown parser (kept for future use if we ingest .md via the API).
+markdown==3.7

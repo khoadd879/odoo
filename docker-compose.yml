@@ -52,6 +52,31 @@ services:
     networks:
       - default
 
+  rag-api:
+    # Day 3 RAG "brain" — ChromaDB + sentence-transformers behind a FastAPI.
+    # See rag/README.md and plans/shiny-mixing-wren.md for context.
+    build:
+      context: .
+      dockerfile: rag/Dockerfile
+    container_name: rag_api
+    environment:
+      CHROMA_PATH: /data/chroma
+      COLLECTION_NAME: steamships_rag
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      DOCS_PATH: /docs/mock/rag_documents
+      MANIFEST_PATH: /docs/mock/rag_documents/MANIFEST_ingestion_metadata.json
+      CHUNK_SIZE: "800"
+      CHUNK_OVERLAP: "100"
+      TOP_K: "5"
+    volumes:
+      - ./chroma_data:/data/chroma
+      - ./mock_data:/docs/mock:ro
+    ports:
+      - "${RAG_HTTP_PORT:-8000}:8000"
+    restart: unless-stopped
+    networks:
+      - default
+
 volumes:
   postgres-data:
 

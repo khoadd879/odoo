@@ -59,7 +59,7 @@ We serve four main industries:
 
 ### Q7: What is the price for shipping a 20ft container from Lae to Port Moresby?
 
-The current standard price is PGK 4,500 per FCL 20ft container. This includes ocean freight only. Stevedoring (port handling) is an additional PGK 850 per move. Fuel surcharge may apply if diesel prices exceed the threshold in our pricing schedule. Contact your salesperson for a firm quote.
+Pricing depends on your contract, the cargo, and current fuel surcharge. For a firm quote, contact our shipping sales desk (shipping@steamships.com.pg) or your assigned salesperson. They will send you a formal quotation within one working day.
 
 ### Q8: Do I need a dangerous goods declaration?
 
