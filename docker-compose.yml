@@ -45,6 +45,7 @@ services:
     volumes:
       - ./addons:/mnt/extra-addons
       - ./odoo-data:/var/lib/odoo
+      - ./custom_addons:/mnt/extra-addons
     ports:
       - "${ODOO_HTTP_PORT:-8069}:8069"
       - "${ODOO_LONGPOLLING_PORT:-8072}:8072"
