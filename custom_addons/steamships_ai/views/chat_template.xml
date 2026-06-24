@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Steamships AI chat page (Day 4 "the face").
+             - Renders inside website.layout (Odoo frontend chrome).
+             - Bootstrap 5 UI (already loaded by website.assets_frontend).
+             - Vanilla JS / fetch API — NO web.ajax, NO jQuery.
+             - JSON-RPC payload: {"jsonrpc":"2.0","method":"call","params":{...}}
+             ============================================================ -->
+        <template id="chat_page_template" name="Steamships AI Chat">
+            <t t-call="website.layout">
+                <t t-set="title">Ask AI — Steamships</t>
+
+                <div class="container py-4" style="max-width: 860px;">
+
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <h1 class="h3 mb-0">Ask AI</h1>
+                            <small class="text-muted">
+                                Hi <t t-esc="user_name"/>. Ask any question about
+                                Steamships procedures, prices, or onboarding.
+                            </small>
+                        </div>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                            Steamships RAG · Day 4
+                        </span>
+                    </div>
+
+                    <!-- ====================================================
+                         Chat history
+                         ==================================================== -->
+                    <div id="ssai-chat-history"
+                         class="border rounded bg-white p-3 mb-3"
+                         style="height: 420px; overflow-y: auto; font-size: 0.95rem;">
+                        <div class="text-muted small mb-0" id="ssai-empty-hint">
+                            The assistant answers ONLY from internal documents
+                            and cites its sources. Try:
+                            <em>"A client wants to ship a 20ft container from
+                            Lae to Port Moresby — what do I quote and what
+                            documents do I need?"</em>
+                        </div>
+                    </div>
+
+                    <!-- ====================================================
+                         Composer
+                         ==================================================== -->
+                    <form id="ssai-composer" class="d-flex gap-2" autocomplete="off">
+                        <input id="ssai-mode"
+                               type="hidden"
+                               t-att-value="default_mode"/>
+                        <select id="ssai-mode-select"
+                                class="form-select form-select-sm"
+                                style="max-width: 130px;"
+                                aria-label="Mode">
+                            <option value="STAFF" t-att-selected="'selected' if default_mode == 'STAFF' else None">
+                                STAFF
+                            </option>
+                            <option value="CLIENT" t-att-selected="'selected' if default_mode == 'CLIENT' else None">
+                                CLIENT
+                            </option>
+                        </select>
+                        <input id="ssai-question"
+                               type="text"
+                               class="form-control"
+                               placeholder="Type your question…"
+                               maxlength="2000"
+                               required="required"/>
+                        <button id="ssai-send"
+                                type="submit"
+                                class="btn btn-primary text-nowrap">
+                            Send
+                        </button>
+                    </form>
+
+                    <div class="form-text mt-2">
+                        STAFF mode searches the full corpus (SOPs, price list,
+                        policies, contacts). CLIENT mode is limited to the
+                        onboarding FAQ, services catalog, and glossary —
+                        internal prices and SOPs are hidden by the rag-api
+                        visibility filter.
+                    </div>
+                </div>
+
+                <!-- ========================================================
+                     Vanilla JS — fetch API + JSON-RPC envelope.
+                     Listens to DOMContentLoaded. No jQuery, no web.ajax.
+                     Wrapped in CDATA so the XML parser does not choke on
+                     ampersands / angle brackets inside the JS body.
+                     ======================================================== -->
+                <script type="text/javascript">
+                /*<![CDATA[*/
+                (function () {
+                    'use strict';
+
+                    document.addEventListener('DOMContentLoaded', function () {
+                        var historyEl = document.getElementById('ssai-chat-history');
+                        var emptyHint = document.getElementById('ssai-empty-hint');
+                        var formEl    = document.getElementById('ssai-composer');
+                        var inputEl   = document.getElementById('ssai-question');
+                        var modeSelEl = document.getElementById('ssai-mode-select');
+                        var modeHidEl = document.getElementById('ssai-mode');
+                        var sendBtn   = document.getElementById('ssai-send');
+
+                        if (!historyEl || !formEl || !inputEl || !sendBtn) {
+                            console.error('Steamships AI: missing DOM nodes');
+                            return;
+                        }
+
+                        // Keep the hidden mode field in sync with the visible select.
+                        if (modeSelEl && modeHidEl) {
+                            modeSelEl.addEventListener('change', function () {
+                                modeHidEl.value = modeSelEl.value;
+                            });
+                        }
+
+                        function escapeHtml(s) {
+                            if (s === undefined || s === null) return '';
+                            return String(s)
+                                .replace(/&amp;/g, '&amp;amp;')
+                                .replace(/&lt;/g, '&amp;lt;')
+                                .replace(/&gt;/g, '&amp;gt;')
+                                .replace(/"/g, '&amp;quot;')
+                                .replace(/'/g, '&#39;');
+                        }
+
+                        function scrollToBottom() {
+                            historyEl.scrollTop = historyEl.scrollHeight;
+                        }
+
+                        function appendMessage(role, html) {
+                            if (emptyHint && emptyHint.parentNode) {
+                                emptyHint.parentNode.removeChild(emptyHint);
+                            }
+                            var wrapper = document.createElement('div');
+                            wrapper.className = 'mb-3';
+                            var labelCls = role === 'user' ? 'text-primary' : 'text-success';
+                            var label = role === 'user' ? 'You' : 'Assistant';
+                            wrapper.innerHTML =
+                                '<div class="fw-semibold small ' + labelCls + ' mb-1">'
+                                + label + '</div>'
+                                + '<div class="ssai-bubble p-2 px-3 rounded border bg-light-subtle">'
+                                + html + '</div>';
+                            historyEl.appendChild(wrapper);
+                            scrollToBottom();
+                        }
+
+                        function appendLoading() {
+                            if (emptyHint && emptyHint.parentNode) {
+                                emptyHint.parentNode.removeChild(emptyHint);
+                            }
+                            var loading = document.createElement('div');
+                            loading.id = 'ssai-loading';
+                            loading.className = 'mb-3';
+                            loading.innerHTML =
+                                '<div class="fw-semibold small text-success mb-1">Assistant</div>'
+                                + '<div class="ssai-bubble p-2 px-3 rounded border bg-light-subtle text-muted">'
+                                + '<span class="spinner-border spinner-border-sm me-2" role="status"></span>'
+                                + 'Thinking…'
+                                + '</div>';
+                            historyEl.appendChild(loading);
+                            scrollToBottom();
+                        }
+
+                        function removeLoading() {
+                            var el = document.getElementById('ssai-loading');
+                            if (el && el.parentNode) {
+                                el.parentNode.removeChild(el);
+                            }
+                        }
+
+                        function renderChunks(chunks) {
+                            if (!chunks || chunks.length === 0) {
+                                return '<div class="text-muted small">'
+                                    + 'I do not know — please ask the '
+                                    + 'appropriate team.</div>';
+                            }
+                            var html = '<div class="small text-muted mb-2">'
+                                + 'Top ' + chunks.length + ' sources from the corpus:'
+                                + '</div>';
+                            chunks.forEach(function (c, idx) {
+                                var name = c.doc_name || c.doc_id || ('Source ' + (idx + 1));
+                                var section = c.section || '';
+                                var score = (typeof c.score === 'number')
+                                    ? ' · score ' + c.score.toFixed(2)
+                                    : '';
+                                var file = c.filename || '';
+                                html +=
+                                    '<div class="mb-2 pb-2 border-bottom">'
+                                    + '<div class="fw-semibold small">'
+                                    + (idx + 1) + '. '
+                                    + escapeHtml(name) + '</div>'
+                                    + '<div class="text-muted small mb-1">'
+                                    + escapeHtml(section) + escapeHtml(score)
+                                    + (file ? ' · ' + escapeHtml(file) : '')
+                                    + '</div>'
+                                    + '<div class="small" style="white-space: pre-wrap;">'
+                                    + escapeHtml(c.text || '') + '</div>'
+                                    + '</div>';
+                            });
+                            return html;
+                        }
+
+                        function send(question, mode) {
+                            appendMessage('user', escapeHtml(question));
+
+                            var loadingAdded = appendLoading();
+                            sendBtn.disabled = true;
+                            inputEl.disabled = true;
+
+                            var body = JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'call',
+                                params: {
+                                    question: question,
+                                    mode: mode
+                                }
+                            });
+
+                            fetch('/ai/retrieve', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json'
+                                },
+                                body: body
+                            })
+                            .then(function (resp) {
+                                return resp.json().then(function (json) {
+                                    return { ok: resp.ok, status: resp.status, json: json };
+                                });
+                            })
+                            .then(function (out) {
+                                removeLoading();
+                                if (out.json && out.json.error) {
+                                    var msg = out.json.error.message || out.json.error.data || 'Unknown error';
+                                    appendMessage(
+                                        'assistant',
+                                        '<div class="text-danger small">Error: '
+                                        + escapeHtml(msg) + '</div>'
+                                    );
+                                    return;
+                                }
+                                // Odoo JSON-RPC result lives at .result (or .result.result for our wrapper).
+                                var payload = (out.json && out.json.result) || null;
+                                var inner = payload && payload.result ? payload.result : payload;
+                                if (!inner) {
+                                    appendMessage(
+                                        'assistant',
+                                        '<div class="text-danger small">Empty response from server.</div>'
+                                    );
+                                    return;
+                                }
+                                if (inner.status === 'error') {
+                                    appendMessage(
+                                        'assistant',
+                                        '<div class="text-danger small">'
+                                        + escapeHtml(inner.message || 'Unknown error')
+                                        + '</div>'
+                                    );
+                                    return;
+                                }
+                                appendMessage('assistant', renderChunks(inner.chunks || []));
+                            })
+                            .catch(function (err) {
+                                removeLoading();
+                                appendMessage(
+                                    'assistant',
+                                    '<div class="text-danger small">Network error: '
+                                    + escapeHtml(err && err.message ? err.message : String(err))
+                                    + '</div>'
+                                );
+                            })
+                            .finally(function () {
+                                sendBtn.disabled = false;
+                                inputEl.disabled = false;
+                                inputEl.focus();
+                            });
+                        }
+
+                        formEl.addEventListener('submit', function (ev) {
+                            ev.preventDefault();
+                            var q = (inputEl.value || '').trim();
+                            if (!q) return;
+                            var mode = (modeHidEl && modeHidEl.value) || 'STAFF';
+                            inputEl.value = '';
+                            send(q, mode);
+                        });
+
+                        // Ctrl/Cmd + Enter also submits.
+                        inputEl.addEventListener('keydown', function (ev) {
+                            if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+                                ev.preventDefault();
+                                formEl.dispatchEvent(new Event('submit', { cancelable: true }));
+                            }
+                        });
+
+                        inputEl.focus();
+                    });
+                })();
+                /*]]>*/
+                </script>
+
+            </t>
+        </template>
+
+    </data>
+</odoo>
