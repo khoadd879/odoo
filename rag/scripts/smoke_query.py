@@ -1,6 +1,6 @@
 """Smoke test for the demo Scene 2 questions.
 
-Hits the running RAG API over HTTP (default http://localhost:8000) and:
+Hits the running RAG API over HTTP (default http://localhost:9000) and:
   1. Asks the star question, asserts the top-5 chunks include PRICELIST-2026-Q2
      and SOP-SHIP-004 (the two sources required by Part C Scene 2).
   2. Asks the honesty question, prints the top scores for review.
@@ -18,7 +18,7 @@ import os
 import sys
 from urllib import request
 
-BASE_URL = os.environ.get("RAG_API_URL", "http://localhost:8000")
+BASE_URL = os.environ.get("RAG_API_URL", "http://localhost:9000")
 STAR_QUESTION = (
     "A client wants to ship a 20ft container from Lae to Port Moresby "
     "— what do I quote and what documents do I need?"

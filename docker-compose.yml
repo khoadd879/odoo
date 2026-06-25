@@ -60,6 +60,9 @@ services:
       context: .
       dockerfile: rag/Dockerfile
     container_name: rag_api
+    # Override the baked-in CMD (port 8000) with port 9000 without rebuilding.
+    # Keeps the cached wheel + embedding model from the prior image.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
     environment:
       CHROMA_PATH: /data/chroma
       COLLECTION_NAME: steamships_rag
@@ -73,7 +76,7 @@ services:
       - ./chroma_data:/data/chroma
       - ./mock_data:/docs/mock:ro
     ports:
-      - "${RAG_HTTP_PORT:-8000}:8000"
+      - "${RAG_HTTP_PORT:-9000}:9000"
     restart: unless-stopped
     networks:
       - default

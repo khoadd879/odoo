@@ -5,7 +5,7 @@
 * ``POST /ai/retrieve`` JSON-RPC bridge to the FastAPI ``rag-api`` service.
 
 The rag-api service is reachable on the Docker network at the hostname
-``rag-api`` (service name in docker-compose.yml). Port 8000 is the
+``rag-api`` (service name in docker-compose.yml). Port 9000 is the
 container's exposed port (the host port mapping is irrelevant from
 inside the compose network).
 """
@@ -22,7 +22,7 @@ _logger = logging.getLogger(__name__)
 
 # rag-api service hostname on the compose network. Override with env var so the
 # same module works in CI / staging / prod without code changes.
-RAG_API_BASE = os.environ.get("RAG_API_BASE", "http://rag-api:8000")
+RAG_API_BASE = os.environ.get("RAG_API_BASE", "http://rag-api:9000")
 RAG_RETRIEVE_TIMEOUT = float(os.environ.get("RAG_RETRIEVE_TIMEOUT", "15"))
 
 

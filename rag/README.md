@@ -35,7 +35,7 @@ the final answer.
 docker compose up -d --build rag-api
 
 # 2. Wait for the healthcheck, then check.
-curl -fsS http://localhost:8000/api/healthz
+curl -fsS http://localhost:9000/api/healthz
 # {"status":"ok","embedding_model":"sentence-transformers/all-MiniLM-L6-v2",
 #  "collection_name":"steamships_rag","chunk_count":0}
 
@@ -44,7 +44,7 @@ docker compose exec rag-api python -m app.scripts.seed
 # Inserted N chunks across 17 documents. Collection: steamships_rag.
 
 # 4. Confirm the collection is populated.
-curl -fsS http://localhost:8000/api/collections/stats
+curl -fsS http://localhost:9000/api/collections/stats
 
 # 5. Run the smoke test against the demo Scene 2 questions.
 docker compose exec rag-api python -m app.scripts.smoke_query
@@ -55,7 +55,7 @@ docker compose exec rag-api python -m app.scripts.smoke_query
 Star question (Demo Scene 2 — "THE STAR"):
 
 ```bash
-curl -sS -X POST http://localhost:8000/api/retrieve \
+curl -sS -X POST http://localhost:9000/api/retrieve \
   -H 'Content-Type: application/json' \
   -d '{
         "question": "A client wants to ship a 20ft container from Lae to Port Moresby — what do I quote and what documents do I need?",
@@ -70,7 +70,7 @@ Expected: top chunks include `PRICELIST-2026-Q2` (price) and `SOP-SHIP-004`
 Honesty question (out of corpus):
 
 ```bash
-curl -sS -X POST http://localhost:8000/api/retrieve \
+curl -sS -X POST http://localhost:9000/api/retrieve \
   -H 'Content-Type: application/json' \
   -d '{"question":"What was the Q1 2026 revenue for Steamships Hospitality division?","mode":"STAFF","top_k":5}' \
   | python -m json.tool
@@ -82,7 +82,7 @@ This is the basis for the LLM's "I do not know" answer — to be wired in Day 4.
 CLIENT mode filter check:
 
 ```bash
-curl -sS -X POST http://localhost:8000/api/retrieve \
+curl -sS -X POST http://localhost:9000/api/retrieve \
   -H 'Content-Type: application/json' \
   -d '{"question":"How much does it cost to ship a container?","mode":"CLIENT","top_k":5}' \
   | python -m json.tool
