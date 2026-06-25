@@ -172,9 +172,7 @@
 
                         function renderChunks(chunks) {
                             if (!chunks || chunks.length === 0) {
-                                return '<div class="text-muted small">'
-                                    + 'I do not know — please ask the '
-                                    + 'appropriate team.</div>';
+                                return '';
                             }
                             var html = '<div class="small text-muted mb-2">'
                                 + 'Top ' + chunks.length + ' sources from the corpus:'
@@ -200,6 +198,62 @@
                                     + '</div>';
                             });
                             return html;
+                        }
+
+                        // The backend (rag_api) converts the LLM's Markdown to
+                        // HTML before returning, so `answer` is already safe
+                        // HTML (a controlled set of tags from python-markdown).
+                        // We intentionally do NOT escape it.
+                        function renderAnswer(answer) {
+                            if (!answer || !answer.trim()) {
+                                return '<div class="text-muted small">'
+                                    + 'I do not know — please ask the '
+                                    + 'appropriate team.</div>';
+                            }
+                            return '<div class="ssai-answer">' + answer + '</div>';
+                        }
+
+                        function appendAssistantAnswer(payload) {
+                            var wrapper = document.createElement('div');
+                            wrapper.className = 'mb-3';
+
+                            var html = '<div class="fw-semibold small text-success mb-1">'
+                                + 'Assistant</div>'
+                                + '<div class="ssai-bubble p-2 px-3 rounded border bg-light-subtle">'
+                                + renderAnswer(payload.answer || '')
+                                + '</div>';
+
+                            var chunks = payload.chunks || [];
+                            if (chunks.length > 0) {
+                                var toggleId = 'ssai-src-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                                html += '<div class="mt-2">'
+                                    + '<a href="#" class="small text-decoration-none" '
+                                    + 'data-ssai-toggle="' + toggleId + '">'
+                                    + 'Show sources (' + chunks.length + ')</a>'
+                                    + '</div>'
+                                    + '<div id="' + toggleId + '" class="ssai-sources mt-2" style="display:none;">'
+                                    + renderChunks(chunks)
+                                    + '</div>';
+                            }
+
+                            wrapper.innerHTML = html;
+                            historyEl.appendChild(wrapper);
+
+                            // Wire up the collapsible toggle (event delegation
+                            // would be nicer but this is the smallest change).
+                            var toggle = wrapper.querySelector('[data-ssai-toggle]');
+                            var panel = wrapper.querySelector('.ssai-sources');
+                            if (toggle && panel) {
+                                toggle.addEventListener('click', function (ev) {
+                                    ev.preventDefault();
+                                    var open = panel.style.display !== 'none';
+                                    panel.style.display = open ? 'none' : 'block';
+                                    toggle.textContent = (open ? 'Show' : 'Hide')
+                                        + ' sources (' + chunks.length + ')';
+                                });
+                            }
+
+                            scrollToBottom();
                         }
 
                         function send(question, mode) {
@@ -262,7 +316,7 @@
                                     );
                                     return;
                                 }
-                                appendMessage('assistant', renderChunks(inner.chunks || []));
+                                appendAssistantAnswer(inner);
                             })
                             .catch(function (err) {
                                 removeLoading();

@@ -57,6 +57,7 @@ class RetrieveResponse(BaseModel):
     question: str
     mode: Mode
     chunks: List[RetrievedChunk]
+    answer: str
 
 
 class CollectionStats(BaseModel):

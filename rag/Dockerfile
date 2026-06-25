@@ -19,7 +19,10 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY rag/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Note: PIP_NO_CACHE_DIR=1 above keeps the final image slim; we deliberately
+# don't pass --no-cache-dir here so a follow-up `pip install <pkg>` inside the
+# running container can reuse the wheel cache instead of re-downloading.
+RUN pip install -r /app/requirements.txt
 
 # Pre-download the embedding model during build so the first request is fast.
 # Runs at build time; the model lands in /root/.cache/huggingface.

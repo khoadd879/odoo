@@ -5,9 +5,13 @@ chromadb==0.5.5
 # sentence-transformers 3.x with the bundled all-MiniLM-L6-v2 (384 dims).
 sentence-transformers==3.1.1
 # FastAPI + uvicorn for the retrieval API.
+httpx<0.28
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 # pydantic v2 for request/response schemas.
 pydantic==2.9.2
 # markdown parser (kept for future use if we ingest .md via the API).
 markdown==3.7
+
+# OpenAI client for the Generation step (Day 4).
+openai==1.54.0

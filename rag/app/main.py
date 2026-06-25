@@ -10,9 +10,12 @@ Lifespan warms up the embedding model and the Chroma collection once. Routes:
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 
+import markdown
 from fastapi import FastAPI, HTTPException
+from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 
 from .config import Settings, get_settings
@@ -102,7 +105,7 @@ def ingest(req: IngestRequest | None = None) -> IngestResponse:
 
 @app.post("/api/retrieve", response_model=RetrieveResponse)
 def retrieve(req: RetrieveRequest) -> RetrieveResponse:
-    """Return top-K chunks filtered by visibility (STAFF or CLIENT)."""
+    """Retrieve top-K chunks and synthesize a natural-language answer via OpenAI."""
     chunks = query_chunks(
         question=req.question,
         mode=req.mode,
@@ -110,4 +113,59 @@ def retrieve(req: RetrieveRequest) -> RetrieveResponse:
         collection=app.state.collection,
         model=app.state.model,
     )
-    return RetrieveResponse(question=req.question, mode=req.mode, chunks=chunks)
+
+    # Format retrieved chunks into a single context string.
+    context = "\n\n".join(c.text for c in chunks) if chunks else ""
+
+    # Initialize the OpenAI-compatible client. Groq is the default backend
+    # (OPENAI_BASE_URL=https://api.groq.com/openai/v1); swap OPENAI_BASE_URL
+    # to point at any other OpenAI-compatible endpoint if needed.
+    settings = app.state.settings
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
+
+    system_prompt = (
+        "You are a friendly and professional AI Assistant for Steamships Trading Company. "
+        "Read the user's input carefully and follow these rules strictly like an IF/ELSE statement: "
+        "- IF the user input is just a greeting (e.g., 'hi', 'hello', 'xin chào', 'chào bạn'): "
+        "  Politely greet them back, introduce yourself as the Steamships AI Assistant, and ask how you can help them with HR, Shipping, or company policies today. DO NOT mention anything about 'context' or 'I don't know'. "
+        "- ELSE IF the user asks a specific question: "
+        "  Answer ONLY using the provided context. If the context does not contain the answer, politely say that you do not have that information in your current documents. "
+        "ALWAYS respond in the SAME LANGUAGE that the user typed."
+    )
+
+    user_prompt = (
+        f"Context:\n{context}\n\n"
+        f"Question: {req.question}"
+    )
+
+    completion = client.chat.completions.create(
+        model=settings.openai_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    raw_answer = (completion.choices[0].message.content or "").strip()
+
+    # Some LLMs wrap their output in a ```html / ```json code fence. Strip it
+    # so the markdown library sees raw Markdown, not a fenced code block.
+    fence_match = re.match(r"^```(?:html|json)?\s*\n(.*)\n```\s*$", raw_answer, re.DOTALL)
+    if fence_match:
+        raw_answer = fence_match.group(1).strip()
+
+    # Convert Markdown -> HTML. The output is safe to drop into an Odoo
+    # HTML field; it's plain <p>/<ul>/<li>/<strong>/<h2>/<a>/etc.
+    answer = markdown.markdown(
+        raw_answer,
+        extensions=["extra", "sane_lists"],
+    )
+
+    return RetrieveResponse(
+        question=req.question,
+        mode=req.mode,
+        chunks=chunks,
+        answer=answer,
+    )

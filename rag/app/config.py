@@ -33,6 +33,9 @@ class Settings:
     chunk_size: int
     chunk_overlap: int
     top_k: int
+    openai_api_key: str
+    openai_base_url: str
+    openai_model: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -49,6 +52,11 @@ class Settings:
             chunk_size=_int_env("CHUNK_SIZE", 800),
             chunk_overlap=_int_env("CHUNK_OVERLAP", 100),
             top_k=_int_env("TOP_K", 5),
+            openai_api_key=os.environ.get("GROQ_API_KEY", ""),
+            openai_base_url=os.environ.get(
+                "OPENAI_BASE_URL", "https://api.groq.com/openai/v1"
+            ),
+            openai_model=os.environ.get("OPENAI_MODEL", "llama-3.3-70b-versatile"),
         )
 
 

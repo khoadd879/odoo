@@ -123,7 +123,12 @@ class SteamshipsAIController(http.Controller):
             }
 
         chunks = data.get("chunks", []) or []
-        _logger.info("rag-api returned %d chunks (mode=%s)", len(chunks), mode)
+        # `answer` is the LLM-synthesised response already converted from
+        # Markdown to safe HTML by rag-api (see app/main.py). Forward it as-is
+        # so the chat UI can render it directly without escaping.
+        answer = data.get("answer", "") or ""
+        _logger.info("rag-api returned %d chunks (mode=%s, answer_len=%d)",
+                     len(chunks), mode, len(answer))
 
         # --- 4. Audit chatter log on the calling user -------------------------
         try:
@@ -135,4 +140,4 @@ class SteamshipsAIController(http.Controller):
         except Exception:  # never break the response because of audit
             _logger.exception("Failed to write chatter audit log")
 
-        return {"status": "success", "chunks": chunks}
+        return {"status": "success", "chunks": chunks, "answer": answer}
