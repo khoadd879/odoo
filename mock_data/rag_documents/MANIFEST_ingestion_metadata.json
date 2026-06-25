@@ -1,0 +1,227 @@
+{
+  "manifest_version": "1.0",
+  "created": "2026-06-24",
+  "purpose": "Steamships Day 3 RAG mock data — ingestion metadata for the AI chatbot vector store",
+  "owner": "Sales Operations / IT",
+  "visibility_split": {
+    "STAFF": [
+      "SOP-SHIP-001_Container_Booking_Procedure.md",
+      "SOP-SHIP-004_Required_Documents_Container_Booking.md",
+      "SOP-SHIP-007_Dangerous_Goods_Declaration.md",
+      "SOP-PROP-002_Commercial_Lease_Application.md",
+      "SOP-HOSP-003_Hotel_Group_Booking_Procedure.md",
+      "SOP-FIN-005_Tenant_Credit_Check.md",
+      "SOP-HR-001_New_Hire_Onboarding_Checklist.md",
+      "SOP-CRM-001_Client_Onboarding_Procedure.md",
+      "SOP-OPS-006_LCL_Consolidation_Warehouse.md",
+      "PRICELIST_2026_Q2.md",
+      "POLICY-DATA-001_Data_Handling_Classification.md",
+      "POLICY-CONDUCT-001_Code_of_Conduct.md",
+      "DIRECTORY_Key_Contacts.md",
+      "VESSEL-Schedule_Q2_2026.md"
+    ],
+    "CLIENT": [
+      "FAQ_Client_Onboarding.md",
+      "CATALOG_Services_Summary.md",
+      "GLOSSARY_Steamships_Terms.md"
+    ]
+  },
+  "documents": [
+    {
+      "filename": "SOP-SHIP-001_Container_Booking_Procedure.md",
+      "doc_id": "SOP-SHIP-001",
+      "doc_name": "SOP-SHIP-001 — Container Booking Procedure",
+      "visibility": "STAFF",
+      "division": "Shipping",
+      "tags": ["shipping", "booking", "FCL", "LCL", "procedure"],
+      "section": "Shipping SOPs",
+      "priority_questions": [
+        "How do I book a container?",
+        "What is the booking workflow?",
+        "What are the cut-off times?"
+      ]
+    },
+    {
+      "filename": "SOP-SHIP-004_Required_Documents_Container_Booking.md",
+      "doc_id": "SOP-SHIP-004",
+      "doc_name": "SOP-SHIP-004 — Required Documents for Container Booking",
+      "visibility": "STAFF",
+      "division": "Shipping",
+      "tags": ["shipping", "documents", "compliance", "FCL", "LCL"],
+      "section": "Shipping SOPs",
+      "priority_questions": [
+        "What documents do I need to ship a container?",
+        "A client wants to ship a 20ft container from Lae to Port Moresby — what documents do I need?",
+        "What is required for a reefer booking?"
+      ]
+    },
+    {
+      "filename": "SOP-SHIP-007_Dangerous_Goods_Declaration.md",
+      "doc_id": "SOP-SHIP-007",
+      "doc_name": "SOP-SHIP-007 — Dangerous Goods Declaration Procedure",
+      "visibility": "STAFF",
+      "division": "Shipping",
+      "tags": ["shipping", "dangerous-goods", "IMDG", "compliance"],
+      "section": "Shipping SOPs"
+    },
+    {
+      "filename": "SOP-PROP-002_Commercial_Lease_Application.md",
+      "doc_id": "SOP-PROP-002",
+      "doc_name": "SOP-PROP-002 — Commercial Lease Application Procedure",
+      "visibility": "STAFF",
+      "division": "Property",
+      "tags": ["property", "lease", "commercial"],
+      "section": "Property SOPs"
+    },
+    {
+      "filename": "SOP-HOSP-003_Hotel_Group_Booking_Procedure.md",
+      "doc_id": "SOP-HOSP-003",
+      "doc_name": "SOP-HOSP-003 — Hotel Group Booking Procedure",
+      "visibility": "STAFF",
+      "division": "Hospitality",
+      "tags": ["hospitality", "group-booking", "hotel", "events"],
+      "section": "Hospitality SOPs"
+    },
+    {
+      "filename": "SOP-FIN-005_Tenant_Credit_Check.md",
+      "doc_id": "SOP-FIN-005",
+      "doc_name": "SOP-FIN-005 — Tenant Credit Check Procedure",
+      "visibility": "STAFF",
+      "division": "Property / Finance",
+      "tags": ["credit-check", "tenant", "compliance", "finance"],
+      "section": "Finance SOPs"
+    },
+    {
+      "filename": "SOP-HR-001_New_Hire_Onboarding_Checklist.md",
+      "doc_id": "SOP-HR-001",
+      "doc_name": "SOP-HR-001 — New Hire Onboarding Checklist",
+      "visibility": "STAFF",
+      "division": "HR",
+      "tags": ["HR", "onboarding", "new-hire"],
+      "section": "HR SOPs"
+    },
+    {
+      "filename": "SOP-CRM-001_Client_Onboarding_Procedure.md",
+      "doc_id": "SOP-CRM-001",
+      "doc_name": "SOP-CRM-001 — Client Onboarding Procedure",
+      "visibility": "STAFF",
+      "division": "Sales / CRM",
+      "tags": ["CRM", "onboarding", "KYC", "client"],
+      "section": "CRM SOPs",
+      "priority_questions": [
+        "How does client onboarding work?",
+        "What are the 8 KYC items?",
+        "How long does onboarding take?"
+      ]
+    },
+    {
+      "filename": "SOP-OPS-006_LCL_Consolidation_Warehouse.md",
+      "doc_id": "SOP-OPS-006",
+      "doc_name": "SOP-OPS-006 — LCL Consolidation Warehouse Procedure",
+      "visibility": "STAFF",
+      "division": "Warehouse / Shipping",
+      "tags": ["warehouse", "LCL", "consolidation", "storage"],
+      "section": "Operations SOPs"
+    },
+    {
+      "filename": "PRICELIST_2026_Q2.md",
+      "doc_id": "PRICELIST-2026-Q2",
+      "doc_name": "Steamships Price List 2026 — Q2 Edition",
+      "visibility": "STAFF",
+      "division": "Group",
+      "tags": ["pricing", "price-list", "shipping", "property", "hospitality"],
+      "section": "Pricing",
+      "priority_questions": [
+        "What is the price for shipping a 20ft container from Lae to Port Moresby?",
+        "How much is office rent in Port Moresby?",
+        "What are hotel rates?"
+      ]
+    },
+    {
+      "filename": "FAQ_Client_Onboarding.md",
+      "doc_id": "FAQ-CLIENT-001",
+      "doc_name": "Steamships Client Onboarding FAQ",
+      "visibility": "CLIENT",
+      "division": "Group",
+      "tags": ["FAQ", "onboarding", "client"],
+      "section": "FAQ"
+    },
+    {
+      "filename": "POLICY-DATA-001_Data_Handling_Classification.md",
+      "doc_id": "POLICY-DATA-001",
+      "doc_name": "POLICY-DATA-001 — Data Handling and Classification Policy",
+      "visibility": "STAFF",
+      "division": "IT / Compliance",
+      "tags": ["data", "policy", "security", "classification"],
+      "section": "Policies"
+    },
+    {
+      "filename": "POLICY-CONDUCT-001_Code_of_Conduct.md",
+      "doc_id": "POLICY-CONDUCT-001",
+      "doc_name": "POLICY-CONDUCT-001 — Code of Conduct",
+      "visibility": "STAFF",
+      "division": "HR / Legal",
+      "tags": ["code-of-conduct", "ethics", "policy"],
+      "section": "Policies"
+    },
+    {
+      "filename": "CATALOG_Services_Summary.md",
+      "doc_id": "CATALOG-2026",
+      "doc_name": "Services Catalog — Steamships Trading Company",
+      "visibility": "CLIENT",
+      "division": "Group",
+      "tags": ["services", "catalog", "marketing"],
+      "section": "Catalog"
+    },
+    {
+      "filename": "DIRECTORY_Key_Contacts.md",
+      "doc_id": "DIRECTORY-2026",
+      "doc_name": "Key Contacts Directory — Steamships Trading Company",
+      "visibility": "STAFF",
+      "division": "Group",
+      "tags": ["contacts", "directory", "people"],
+      "section": "Directory"
+    },
+    {
+      "filename": "VESSEL-Schedule_Q2_2026.md",
+      "doc_id": "VESSEL-SCHED-Q2-2026",
+      "doc_name": "Consort Vessel Schedule — Q2 2026",
+      "visibility": "STAFF",
+      "division": "Shipping",
+      "tags": ["vessel", "schedule", "shipping", "fleet"],
+      "section": "Shipping Schedules"
+    },
+    {
+      "filename": "GLOSSARY_Steamships_Terms.md",
+      "doc_id": "GLOSSARY-2026",
+      "doc_name": "Glossary — Steamships Terms and Acronyms",
+      "visibility": "CLIENT",
+      "division": "Group",
+      "tags": ["glossary", "definitions", "acronyms"],
+      "section": "Reference"
+    }
+  ],
+  "demo_questions_part_c": {
+    "scene_2_star_question": {
+      "question": "A client wants to ship a 20ft container from Lae to Port Moresby — what do I quote and what documents do I need?",
+      "expected_sources": ["PRICELIST-2026-Q2", "SOP-SHIP-004"],
+      "expected_answer_components": [
+        "Price: PGK 4,500 (FCL 20ft Lae -> POM)",
+        "Documents: Commercial Invoice, Packing List, Export Permit (if regulated), KYC pack, Letter of Authority (if forwarder), DGD (if DG)",
+        "Source citation"
+      ]
+    },
+    "honesty_question": {
+      "question": "What was the Q1 2026 revenue for Steamships Hospitality division?",
+      "expected_behavior": "Bot says 'I do not know, please ask the CFO or the Hospitality Head' — does NOT guess"
+    }
+  },
+  "ingestion_config": {
+    "chunk_size_chars": 800,
+    "chunk_overlap_chars": 100,
+    "chunk_strategy": "paragraph-aware with header preservation",
+    "metadata_per_chunk": ["doc_id", "doc_name", "section", "visibility", "division", "tags", "filename", "chunk_index"],
+    "embedding_model": "anthropic.voyage-3 (mock mode: keyword hash)",
+    "vector_store": "Chroma (in-memory for mock) or pgvector (production)"
+  }
+}

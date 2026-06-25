@@ -21,3 +21,13 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+
+# Playwright MCP test output
+.playwright-mcp/
+
+# Day 3 RAG: Chroma persistence + Python venvs (per plans/shiny-mixing-wren.md)
+chroma_data/
+
+# Day 4 custom_addons/ — OCA clones created by entrypoint.sh into this dir
+# (steamships_ai module itself is the only thing we commit).
+custom_addons/oca/

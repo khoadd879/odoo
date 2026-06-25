@@ -627,7 +627,7 @@ Accounting > Bank > Bank Statements > Import CSV từ ngân hàng
 
 ## 13. Tích hợp với custom module
 
-Module `hello_shop` hiện tại chỉ thêm 1 field demo. Khi mở rộng:
+Module `steamships_demo` hiện tại đã có 4 features end-to-end (divisions, KYC, discount approval, AI chat). Khi mở rộng:
 
 **Ví dụ: thêm workflow B2B với giá wholesale**
 

@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16
-    container_name: odoo_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-odoo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -14,6 +13,8 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - default
 
   odoo:
     build:
@@ -33,13 +34,71 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER:-odoo}
       DB_NAME: ${DB_NAME:-odoo_dev}
+      # Gmail SMTP (used if configuring outbound mail server in Settings)
+      MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
+      MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
+      MAIL_SMTP_USER: ${MAIL_SMTP_USER}
+      MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD}
+      MAIL_SMTP_FROM: ${MAIL_SMTP_FROM}
+      MAIL_SMTP_FROM_NAME: ${MAIL_SMTP_FROM_NAME}
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./addons:/mnt/extra-addons
       - ./odoo-data:/var/lib/odoo
+      - ./custom_addons:/mnt/extra-addons
     ports:
       - "${ODOO_HTTP_PORT:-8069}:8069"
       - "${ODOO_LONGPOLLING_PORT:-8072}:8072"
     restart: unless-stopped
+    networks:
+      - default
+
+  rag-api:
+    # Day 3 RAG "brain" — ChromaDB + sentence-transformers behind a FastAPI.
+    # See rag/README.md and plans/shiny-mixing-wren.md for context.
+    build:
+      context: .
+      dockerfile: rag/Dockerfile
+    container_name: rag_api
+    # Override the baked-in CMD (port 8000) with port 9000 without rebuilding.
+    # Keeps the cached wheel + embedding model from the prior image.
+    # --reload watches /app/app for changes so editing main.py on the host
+    # hot-reloads uvicorn without `docker compose restart` (requires the
+    # source mount below).
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000", "--reload"]
+    # env_file picks up GROQ_API_KEY (and any other secrets) from .env so the
+    # OpenAI-compatible client (Groq) can authenticate. Without this the client
+    # sends an empty Bearer header and Groq returns a 5xx.
+    env_file: .env
+    environment:
+      CHROMA_PATH: /data/chroma
+      COLLECTION_NAME: steamships_rag
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      DOCS_PATH: /docs/mock/rag_documents
+      MANIFEST_PATH: /docs/mock/rag_documents/MANIFEST_ingestion_metadata.json
+      CHUNK_SIZE: "800"
+      CHUNK_OVERLAP: "100"
+      TOP_K: "5"
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-${GROQ_API_KEY}}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.groq.com/openai/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-llama-3.3-70b-versatile}
+    volumes:
+      - ./chroma_data:/data/chroma
+      - ./mock_data:/docs/mock:ro
+      # Mount the source so --reload picks up prompt edits without rebuilding.
+      # __pycache__ is excluded via .dockerignore-ish behaviour: uvicorn ignores
+      # stale .pyc files when source is newer.
+      - ./rag/app:/app/app
+    ports:
+      - "${RAG_HTTP_PORT:-9000}:9000"
+    restart: unless-stopped
+    networks:
+      - default
 
 volumes:
   postgres-data:
+
+networks:
+  default:
+    driver: bridge
