@@ -9,10 +9,13 @@ Lifespan warms up the embedding model and the Chroma collection once. Routes:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import re
 from contextlib import asynccontextmanager
 
+import fitz  # PyMuPDF
 import markdown
 from fastapi import FastAPI, HTTPException
 from openai import OpenAI
@@ -29,6 +32,8 @@ from .manifest import Manifest
 from .retrieve import query_chunks
 from .schemas import (
     CollectionStats,
+    DocumentAnalyzeRequest,
+    DocumentAnalyzeResponse,
     HealthResponse,
     IngestRequest,
     IngestResponse,
@@ -169,3 +174,155 @@ def retrieve(req: RetrieveRequest) -> RetrieveResponse:
         chunks=chunks,
         answer=answer,
     )
+
+
+# ---------------------------------------------------------------------------
+# KYC / Document Analysis
+# ---------------------------------------------------------------------------
+
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+_TEXT_EXTS = {".txt", ".csv", ".md"}
+_PDF_MAX_PAGES = 3
+_PDF_DPI = 150
+_TEXT_MAX_CHARS = 15_000
+
+_SYSTEM_PROMPT = (
+    "Bạn là một Chuyên gia Thẩm định Hồ sơ (KYC/Compliance Officer) của Steamships "
+    "Trading Company. Nhiệm vụ của bạn là đọc và phân tích tài liệu được cung cấp "
+    "(Giấy phép kinh doanh, Hợp đồng, Giấy tờ tùy thân). Hãy đọc cẩn thận và trả về "
+    "kết quả ĐÚNG ĐỊNH DẠNG JSON với các key: is_valid_kyc, company_name_found, "
+    "has_signature, confidence_score, reasoning. TRẢ VỀ CHỈ JSON, KHÔNG CÓ MARKDOWN "
+    "HOẶC TEXT NÀO KHÁC."
+)
+
+
+def _split_ext(filename: str) -> str:
+    """Return the lowercase extension including the leading dot, e.g. '.pdf'."""
+    return "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+
+def _prepare_content_for_llm(
+    filename: str, file_bytes: bytes
+) -> tuple[list[dict], str | None]:
+    """Route the uploaded file to the right shape for the OpenAI chat completion.
+
+    Returns ``(content_parts, plain_text_or_none)``:
+      - ``content_parts`` is the OpenAI ``user.content`` payload — a list of dicts
+        mixing ``image_url`` and ``text`` parts.
+      - ``plain_text_or_none`` is the decoded text when the file is a text file
+        (used to append into the user prompt), otherwise ``None``.
+    """
+    ext = _split_ext(filename)
+
+    if ext in _IMAGE_EXTS:
+        mime = "image/png" if ext == ".png" else "image/jpeg"
+        if ext == ".webp":
+            mime = "image/webp"
+        data_url = f"data:{mime};base64,{base64.b64encode(file_bytes).decode('ascii')}"
+        return (
+            [{"type": "image_url", "image_url": {"url": data_url}}],
+            None,
+        )
+
+    if ext == ".pdf":
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+        except Exception as exc:  # PyMuPDF raises a variety of errors on bad PDFs
+            raise HTTPException(status_code=400, detail=f"Invalid PDF: {exc}") from exc
+
+        parts: list[dict] = []
+        zoom = _PDF_DPI / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+        try:
+            for page_index in range(min(len(doc), _PDF_MAX_PAGES)):
+                page = doc.load_page(page_index)
+                pix = page.get_pixmap(matrix=matrix, alpha=False)
+                img_b64 = base64.b64encode(pix.tobytes("jpeg")).decode("ascii")
+                parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},
+                    }
+                )
+        finally:
+            doc.close()
+        return parts, None
+
+    if ext in _TEXT_EXTS:
+        try:
+            text = file_bytes.decode("utf-8", errors="replace")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot decode text file: {exc}") from exc
+        if len(text) > _TEXT_MAX_CHARS:
+            text = text[:_TEXT_MAX_CHARS]
+        return [{"type": "text", "text": text}], text
+
+    raise HTTPException(status_code=400, detail="Unsupported file format")
+
+
+@app.post("/api/analyze-document", response_model=DocumentAnalyzeResponse)
+def analyze_document(req: DocumentAnalyzeRequest) -> DocumentAnalyzeResponse:
+    """Run a Vision LLM over an uploaded KYC document and return a structured verdict."""
+    # 1. Decode the base64 payload.
+    try:
+        file_bytes = base64.b64decode(req.file_base64, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}") from exc
+
+    # 2. Route the file to the right shape (images, PDF pages, or text).
+    content_parts, plain_text = _prepare_content_for_llm(req.filename, file_bytes)
+
+    # 3. Build the user prompt — append expected_company_name if provided.
+    user_prompt = "Hãy phân tích tài liệu sau đây."
+    if req.expected_company_name:
+        user_prompt += (
+            f" Đặc biệt hãy xác minh tên công ty: \"{req.expected_company_name}\"."
+        )
+
+    # The text file case already inlined the document text into content_parts;
+    # in that case the user prompt is just the directive. For images / PDFs we
+    # put the directive first so the model treats the file as evidence.
+    if plain_text is None:
+        user_content: list[dict] = [{"type": "text", "text": user_prompt}] + content_parts
+    else:
+        user_content = [{"type": "text", "text": f"{user_prompt}\n\n---\n{plain_text}\n---"}]
+
+    # 4. Call the OpenAI-compatible client. Force JSON output.
+    settings: Settings = app.state.settings
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
+
+    try:
+        completion = client.chat.completions.create(
+            model=getattr(settings, "openai_model", "gpt-4o-mini") or "gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw = (completion.choices[0].message.content or "").strip()
+    except Exception as exc:
+        logger.exception("LLM call failed for analyze-document")
+        raise HTTPException(status_code=500, detail=f"LLM call failed: {exc}") from exc
+
+    # 5. Parse the JSON verdict and return it.
+    try:
+        payload = json.loads(raw)
+    except Exception as exc:
+        logger.exception("LLM returned non-JSON for analyze-document: %r", raw)
+        raise HTTPException(status_code=500, detail=f"LLM returned non-JSON output: {exc}") from exc
+
+    try:
+        return DocumentAnalyzeResponse(
+            is_valid_kyc=bool(payload.get("is_valid_kyc", False)),
+            company_name_found=str(payload.get("company_name_found", "")),
+            has_signature=bool(payload.get("has_signature", False)),
+            confidence_score=int(payload.get("confidence_score", 0)),
+            reasoning=str(payload.get("reasoning", "")),
+        )
+    except Exception as exc:
+        logger.exception("LLM JSON did not match DocumentAnalyzeResponse: %r", payload)
+        raise HTTPException(status_code=500, detail=f"Invalid LLM response shape: {exc}") from exc

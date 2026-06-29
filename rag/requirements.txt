@@ -15,3 +15,5 @@ markdown==3.7
 
 # OpenAI client for the Generation step (Day 4).
 openai==1.54.0
+# PyMuPDF for rasterising the first 3 pages of uploaded KYC PDFs to JPEG.
+pymupdf>=1.24,<2.0

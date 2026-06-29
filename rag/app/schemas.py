@@ -64,3 +64,24 @@ class CollectionStats(BaseModel):
     collection_name: str
     chunk_count: int
     embedding_model: str
+
+
+class DocumentAnalyzeRequest(BaseModel):
+    """Request body for /api/analyze-document (KYC vision analysis)."""
+
+    lead_id: int
+    filename: str
+    file_base64: str = Field(
+        description="Base64-encoded content of the file (PDF, image, or text).",
+    )
+    expected_company_name: Optional[str] = None
+
+
+class DocumentAnalyzeResponse(BaseModel):
+    """Structured result returned by the KYC vision LLM."""
+
+    is_valid_kyc: bool
+    company_name_found: str
+    has_signature: bool
+    confidence_score: int = Field(ge=0, le=100)
+    reasoning: str
