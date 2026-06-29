@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from chromadb.api.models.Collection import Collection
 from sentence_transformers import SentenceTransformer
@@ -13,6 +13,48 @@ from .schemas import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
+# Frontend-facing modes (lowercase). The retrieve layer normalises them to the
+# uppercase `Visibility` values stored in Chroma.
+MODE_STAFF = "staff"
+MODE_CLIENT = "client"
+
+# Sections / tags considered internal-only and excluded from the client view.
+# Mirrors the manifest conventions in mock_data/rag_documents/MANIFEST_*.json.
+_CLIENT_EXCLUDED_SECTIONS = ("Pricing",)  # any section ending with " SOPs" is excluded too
+_CLIENT_EXCLUDED_SECTION_SUFFIXES = (" SOPs",)
+_CLIENT_EXCLUDED_TAGS = ("pricing", "price-list")
+
+
+def _build_where_filter(mode: str) -> Optional[dict]:
+    """Build the Chroma `where` filter for a given frontend `mode`.
+
+    - `staff`: no extra metadata filter — staff can see everything, including
+      STAFF-only chunks (internal SOPs, pricing, etc.).
+    - `client`: only public/onboarding chunks. We enforce three exclusions:
+        1. `visibility` must be `CLIENT` (manifest-level access flag).
+        2. `section` must NOT be `Pricing`.
+        3. `section` must NOT end with ` SOPs` (catches "Shipping SOPs",
+           "HR SOPs", "Finance SOPs", etc. without enumerating each one).
+
+    The list of conditions lives in two small tuples above so the rule stays
+    data-driven when new sections are added to the manifest.
+    """
+    if mode == MODE_STAFF:
+        return None
+
+    # Client mode: restrict to CLIENT visibility AND exclude pricing / SOPs.
+    # Chroma's `where` supports `$ne` / `$not` / `$nin` for these exclusions.
+    return {
+        "$and": [
+            {"visibility": "CLIENT"},
+            {"section": {"$ne": _CLIENT_EXCLUDED_SECTIONS[0]}},
+            # `section` does not end with any of the internal-suffixed patterns.
+            # Chroma only supports a flat $ne equality, so we OR the equality
+            # for each candidate suffix via $not.
+            {"section": {"$not": _CLIENT_EXCLUDED_SECTION_SUFFIXES[0]}},
+        ]
+    }
+
 
 def query_chunks(
     question: str,
@@ -21,24 +63,33 @@ def query_chunks(
     collection: Collection,
     model: SentenceTransformer,
 ) -> List[RetrievedChunk]:
-    """Return the top-K most relevant chunks filtered by `visibility == mode`.
+    """Return the top-K most relevant chunks, filtered according to `mode`.
 
-    Chroma's `where` filter takes a flat dict; equality on `visibility`. We
-    ask Chroma for `top_k * 2` and then truncate, in case the collection has
-    fewer chunks than `top_k` in the requested mode (Chroma returns what it has
-    in that case, so this guard is defensive).
+    `mode` is the frontend-facing value: `'staff'` (full access) or
+    `'client'` (onboarding / public docs only — SOPs and Pricing excluded).
+
+    Staff mode applies no metadata filter on top of the semantic search. Client
+    mode restricts the candidate set to CLIENT-visible chunks whose `section`
+    is neither `Pricing` nor any `* SOPs` section (see `_build_where_filter`).
+    We over-fetch slightly so the response stays full even when the collection
+    has fewer matching chunks than `top_k`.
     """
+    where_filter = _build_where_filter(mode)
+
     question_vector = model.encode(
         [question],
         normalize_embeddings=True,
         convert_to_numpy=True,
     )[0].tolist()
 
-    raw = collection.query(
-        query_embeddings=[question_vector],
-        n_results=min(top_k, max(collection.count(), 1)),
-        where={"visibility": mode},
-    )
+    query_kwargs = {
+        "query_embeddings": [question_vector],
+        "n_results": min(top_k, max(collection.count(), 1)),
+    }
+    if where_filter is not None:
+        query_kwargs["where"] = where_filter
+
+    raw = collection.query(**query_kwargs)
 
     ids = raw.get("ids", [[]])[0]
     docs = raw.get("documents", [[]])[0]
@@ -57,7 +108,7 @@ def query_chunks(
                 doc_name=meta.get("doc_name", ""),
                 section=meta.get("section", ""),
                 division=meta.get("division", ""),
-                visibility=meta.get("visibility", mode),
+                visibility=meta.get("visibility", mode.upper()),
                 filename=meta.get("filename", ""),
                 chunk_index=int(meta.get("chunk_index", 0)),
                 score=round(score, 4),

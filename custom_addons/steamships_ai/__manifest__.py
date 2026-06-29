@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Steamships AI Chatbot",
-    "version": "18.0.1.0.0",
+    "version": "19.0.1.0.0",
     "summary": "Day 4 — Chat UI that talks to the Steamships RAG API (rag-api:9000).",
     "description": """
 Steamships AI Chatbot
