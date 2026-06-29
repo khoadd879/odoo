@@ -16,7 +16,6 @@ import re
 from contextlib import asynccontextmanager
 
 import fitz  # PyMuPDF
-import markdown
 from fastapi import FastAPI, HTTPException
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer
@@ -117,27 +116,85 @@ def ingest(req: IngestRequest | None = None) -> IngestResponse:
 # confidentiality clause so the model refuses to surface internal pricing,
 # SOPs, or any other company-confidential info — defence in depth on top of the
 # metadata filter that already excluded those chunks client-side.
-_BASE_SYSTEM_PROMPT = (
-    "You are a friendly and professional AI Assistant for Steamships Trading Company. "
-    "Read the user's input carefully and follow these rules strictly like an IF/ELSE statement: "
-    "- IF the user input is just a greeting (e.g., 'hi', 'hello', 'xin chào', 'chào bạn'): "
-    "  Politely greet them back, introduce yourself as the Steamships AI Assistant, and ask how you can help them with HR, Shipping, or company policies today. DO NOT mention anything about 'context' or 'I don't know'. "
-    "- ELSE IF the user asks a specific question: "
-    "  Answer ONLY using the provided context. If the context does not contain the answer, politely say that you do not have that information in your current documents. "
-    "ALWAYS respond in the SAME LANGUAGE that the user typed."
-)
+_BASE_SYSTEM_PROMPT = """
+You are a friendly and professional AI Assistant for Steamships Trading Company.
 
-_CLIENT_SYSTEM_PROMPT = (
-    "You are assisting a client. Do NOT disclose any internal pricing, SOPs, "
-    "or confidential company info. "
-    + _BASE_SYSTEM_PROMPT
-)
+Rules:
+- Answer in the same language as the user.
+- Answer only from the supplied Context.
+- If the answer is not in Context, reply exactly:
+  I don't know based on the available documents. Please ask the Sales Operations team.
+- Do not guess, invent prices, invent documents, or invent approvals.
+- Keep answers short, clear, and demo-ready.
+- Return plain Markdown only. Do not return HTML.
+- For every specific business answer, use Markdown headings and bullets/lists. Avoid long paragraphs.
+- Use `**bold**` for important facts: prices, routes, container types, mode, warnings, approval rules, and source names.
+- For quote/document questions, use exactly these headings and no substitutes: `### Quote Guidance`, `### Required Documents`, `### Odoo Next Step`, `### Sources`.
+- Do not add alternative headings such as `### Shipping Process` or `### Next Steps`.
+"""
 
-_STAFF_SYSTEM_PROMPT = (
-    "You are an internal assistant. You can provide full details including "
-    "internal pricing and SOPs. "
-    + _BASE_SYSTEM_PROMPT
-)
+_CLIENT_SYSTEM_PROMPT = """
+You are answering in **CLIENT mode**.
+**Do not reveal internal pricing**, internal SOP names/details, margins, discount limits, pricelist names, or approval rules.
+If the client asks for internal/demo pricing, margins, SOPs, discounts, or approvals, say they need to contact Sales for an official quote.
+Only use public/client-safe context.
+For shipping quote/document questions, use this safe structure:
+
+### Quote Guidance
+- Service: **20ft FCL, Lae → Port Moresby**
+- Price: Please contact **Sales** for an official quote.
+
+### Required Documents
+**Client onboarding**
+1. Registration form
+2. KYC documents
+3. Signed terms
+
+**Container booking**
+1. Commercial invoice
+2. Packing list
+3. Export permit, if applicable
+4. Shipper and consignee details
+5. Commodity, weight, volume, container type and quantity
+
+### Odoo Next Step
+Ask **Sales** to prepare the official customer quote.
+
+### Sources
+- **Steamships Client Onboarding FAQ**
+- **Services Catalog — Steamships Trading Company**
+""" + _BASE_SYSTEM_PROMPT
+
+_STAFF_SYSTEM_PROMPT = """
+You are answering in **STAFF mode**.
+You may use internal SOPs, demo prices, price lists, and approval rules when they appear in Context.
+For shipping quote/document questions, use this structure exactly:
+
+### Quote Guidance
+- Service: **20ft FCL, Lae → Port Moresby**
+- Standard price: **PGK 4,500**
+
+### Required Documents
+**Client onboarding**
+1. Registration form
+2. KYC documents
+3. Signed terms
+
+**Container booking**
+1. Commercial invoice
+2. Packing list
+3. Export permit, if applicable
+4. Shipper and consignee details
+5. Commodity, weight, volume, container type and quantity
+
+### Odoo Next Step
+Create the quotation in Odoo using the correct customer pricelist. If the discount is **above 10%**, request **manager approval** before sending.
+
+### Sources
+- **Steamships Standard Price List**
+- **SOP-SHIP-004: Required Documents for Container Booking**
+- **Client Onboarding Checklist**
+""" + _BASE_SYSTEM_PROMPT
 
 
 def _system_prompt_for(mode: str) -> str:
@@ -146,6 +203,29 @@ def _system_prompt_for(mode: str) -> str:
         return _STAFF_SYSTEM_PROMPT
     # Default to the conservative (client-safe) prompt on any unknown value.
     return _CLIENT_SYSTEM_PROMPT
+
+
+def _ensure_odoo_next_step(answer: str, mode: str) -> str:
+    """Keep demo quote answers on the agreed section contract."""
+    if "### Quote Guidance" not in answer and "### Required Documents" not in answer:
+        return answer
+    answer = re.sub(r"### Next Steps?", "### Odoo Next Step", answer)
+    if "### Odoo Next Step" in answer:
+        return answer
+    if mode == MODE_STAFF:
+        block = (
+            "### Odoo Next Step\n"
+            "Create the quotation in Odoo using the correct customer pricelist. "
+            "If the discount is **above 10%**, request **manager approval** before sending."
+        )
+    else:
+        block = (
+            "### Odoo Next Step\n"
+            "Ask **Sales** to prepare the official customer quote."
+        )
+    if "### Sources" in answer:
+        return answer.replace("### Sources", f"{block}\n\n### Sources", 1)
+    return f"{answer}\n\n{block}"
 
 
 @app.post("/api/retrieve", response_model=RetrieveResponse)
@@ -165,8 +245,11 @@ def retrieve(req: RetrieveRequest) -> RetrieveResponse:
         model=app.state.model,
     )
 
-    # Format retrieved chunks into a single context string.
-    context = "\n\n".join(c.text for c in chunks) if chunks else ""
+    # Format retrieved chunks with metadata so the LLM can cite source names.
+    context = "\n\n".join(
+        f"Source: {c.doc_name}\nSection: {c.section}\nText:\n{c.text}"
+        for c in chunks
+    ) if chunks else ""
 
     # Initialize the OpenAI-compatible client. Groq is the default backend
     # (OPENAI_BASE_URL=https://api.groq.com/openai/v1); swap OPENAI_BASE_URL
@@ -193,24 +276,24 @@ def retrieve(req: RetrieveRequest) -> RetrieveResponse:
     )
     raw_answer = (completion.choices[0].message.content or "").strip()
 
-    # Some LLMs wrap their output in a ```html / ```json code fence. Strip it
-    # so the markdown library sees raw Markdown, not a fenced code block.
-    fence_match = re.match(r"^```(?:html|json)?\s*\n(.*)\n```\s*$", raw_answer, re.DOTALL)
+    # Some LLMs wrap output in code fences. Keep Markdown raw for the UI renderer.
+    fence_match = re.match(r"^```(?:markdown|md|html|json)?\s*\n(.*)\n```\s*$", raw_answer, re.DOTALL)
     if fence_match:
         raw_answer = fence_match.group(1).strip()
 
-    # Convert Markdown -> HTML. The output is safe to drop into an Odoo
-    # HTML field; it's plain <p>/<ul>/<li>/<strong>/<h2>/<a>/etc.
-    answer = markdown.markdown(
-        raw_answer,
-        extensions=["extra", "sane_lists"],
-    )
+    raw_answer = _ensure_odoo_next_step(raw_answer, req.mode)
+
+    source_names = list(dict.fromkeys(c.doc_name for c in chunks if c.doc_name))
+    if source_names and "### Sources" not in raw_answer:
+        raw_answer += "\n\n### Sources\n" + "\n".join(
+            f"- **{name}**" for name in source_names[:5]
+        )
 
     return RetrieveResponse(
         question=req.question,
         mode=req.mode,
         chunks=chunks,
-        answer=answer,
+        answer=raw_answer,
     )
 
 

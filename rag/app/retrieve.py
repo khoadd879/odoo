@@ -18,13 +18,6 @@ logger = logging.getLogger(__name__)
 MODE_STAFF = "staff"
 MODE_CLIENT = "client"
 
-# Sections / tags considered internal-only and excluded from the client view.
-# Mirrors the manifest conventions in mock_data/rag_documents/MANIFEST_*.json.
-_CLIENT_EXCLUDED_SECTIONS = ("Pricing",)  # any section ending with " SOPs" is excluded too
-_CLIENT_EXCLUDED_SECTION_SUFFIXES = (" SOPs",)
-_CLIENT_EXCLUDED_TAGS = ("pricing", "price-list")
-
-
 def _build_where_filter(mode: str) -> Optional[dict]:
     """Build the Chroma `where` filter for a given frontend `mode`.
 
@@ -42,18 +35,9 @@ def _build_where_filter(mode: str) -> Optional[dict]:
     if mode == MODE_STAFF:
         return None
 
-    # Client mode: restrict to CLIENT visibility AND exclude pricing / SOPs.
-    # Chroma's `where` supports `$ne` / `$not` / `$nin` for these exclusions.
-    return {
-        "$and": [
-            {"visibility": "CLIENT"},
-            {"section": {"$ne": _CLIENT_EXCLUDED_SECTIONS[0]}},
-            # `section` does not end with any of the internal-suffixed patterns.
-            # Chroma only supports a flat $ne equality, so we OR the equality
-            # for each candidate suffix via $not.
-            {"section": {"$not": _CLIENT_EXCLUDED_SECTION_SUFFIXES[0]}},
-        ]
-    }
+    # Client mode: restrict to public/client-safe documents. The ingestion
+    # manifest already marks pricing and SOP documents as STAFF-only.
+    return {"visibility": "CLIENT"}
 
 
 def query_chunks(

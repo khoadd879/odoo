@@ -32,6 +32,16 @@ the ``visibility`` Chroma metadata filter.
     "data": [
         "views/chat_template.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "steamships_ai/static/src/js/chatbot_widget.js",
+            "steamships_ai/static/src/scss/chatbot_widget.scss",
+        ],
+        "web.assets_frontend": [
+            "steamships_ai/static/src/js/chatbot_widget.js",
+            "steamships_ai/static/src/scss/chatbot_widget.scss",
+        ],
+    },
     "installable": True,
     "application": True,
     "auto_install": False,
