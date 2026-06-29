@@ -29,7 +29,7 @@ from .ingest import (
     upsert_chunks,
 )
 from .manifest import Manifest
-from .retrieve import query_chunks
+from .retrieve import MODE_CLIENT, MODE_STAFF, query_chunks
 from .schemas import (
     CollectionStats,
     DocumentAnalyzeRequest,
@@ -108,9 +108,55 @@ def ingest(req: IngestRequest | None = None) -> IngestResponse:
     )
 
 
+# ---------------------------------------------------------------------------
+# Retrieve: system prompts per audience
+# ---------------------------------------------------------------------------
+#
+# The base prompt (used for staff) carries the bilingual greeting behaviour and
+# the "answer only from context" rule. The client prompt adds an explicit
+# confidentiality clause so the model refuses to surface internal pricing,
+# SOPs, or any other company-confidential info — defence in depth on top of the
+# metadata filter that already excluded those chunks client-side.
+_BASE_SYSTEM_PROMPT = (
+    "You are a friendly and professional AI Assistant for Steamships Trading Company. "
+    "Read the user's input carefully and follow these rules strictly like an IF/ELSE statement: "
+    "- IF the user input is just a greeting (e.g., 'hi', 'hello', 'xin chào', 'chào bạn'): "
+    "  Politely greet them back, introduce yourself as the Steamships AI Assistant, and ask how you can help them with HR, Shipping, or company policies today. DO NOT mention anything about 'context' or 'I don't know'. "
+    "- ELSE IF the user asks a specific question: "
+    "  Answer ONLY using the provided context. If the context does not contain the answer, politely say that you do not have that information in your current documents. "
+    "ALWAYS respond in the SAME LANGUAGE that the user typed."
+)
+
+_CLIENT_SYSTEM_PROMPT = (
+    "You are assisting a client. Do NOT disclose any internal pricing, SOPs, "
+    "or confidential company info. "
+    + _BASE_SYSTEM_PROMPT
+)
+
+_STAFF_SYSTEM_PROMPT = (
+    "You are an internal assistant. You can provide full details including "
+    "internal pricing and SOPs. "
+    + _BASE_SYSTEM_PROMPT
+)
+
+
+def _system_prompt_for(mode: str) -> str:
+    """Pick the right system prompt for the requesting audience."""
+    if mode == MODE_STAFF:
+        return _STAFF_SYSTEM_PROMPT
+    # Default to the conservative (client-safe) prompt on any unknown value.
+    return _CLIENT_SYSTEM_PROMPT
+
+
 @app.post("/api/retrieve", response_model=RetrieveResponse)
 def retrieve(req: RetrieveRequest) -> RetrieveResponse:
-    """Retrieve top-K chunks and synthesize a natural-language answer via OpenAI."""
+    """Retrieve top-K chunks and synthesize a natural-language answer via OpenAI.
+
+    The `mode` field in the request selects both the metadata filter applied
+    at retrieval time (`staff` = full access, `client` = public docs only) and
+    the system prompt used for the LLM call. See `_system_prompt_for` and
+    `retrieve._build_where_filter`.
+    """
     chunks = query_chunks(
         question=req.question,
         mode=req.mode,
@@ -131,15 +177,7 @@ def retrieve(req: RetrieveRequest) -> RetrieveResponse:
         base_url=settings.openai_base_url,
     )
 
-    system_prompt = (
-        "You are a friendly and professional AI Assistant for Steamships Trading Company. "
-        "Read the user's input carefully and follow these rules strictly like an IF/ELSE statement: "
-        "- IF the user input is just a greeting (e.g., 'hi', 'hello', 'xin chào', 'chào bạn'): "
-        "  Politely greet them back, introduce yourself as the Steamships AI Assistant, and ask how you can help them with HR, Shipping, or company policies today. DO NOT mention anything about 'context' or 'I don't know'. "
-        "- ELSE IF the user asks a specific question: "
-        "  Answer ONLY using the provided context. If the context does not contain the answer, politely say that you do not have that information in your current documents. "
-        "ALWAYS respond in the SAME LANGUAGE that the user typed."
-    )
+    system_prompt = _system_prompt_for(req.mode)
 
     user_prompt = (
         f"Context:\n{context}\n\n"

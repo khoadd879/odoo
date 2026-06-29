@@ -7,7 +7,9 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Visibility = Literal["STAFF", "CLIENT"]
-Mode = Visibility  # alias used by the retrieve endpoint
+# Frontend sends `mode` in lowercase ('staff' | 'client'). We normalise it to
+# the uppercase `Visibility` value before passing it down to the retriever.
+Mode = Literal["staff", "client"]
 
 
 class HealthResponse(BaseModel):
@@ -49,12 +51,15 @@ class RetrievedChunk(BaseModel):
 
 class RetrieveRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    mode: Mode = "STAFF"
+    # Frontend-facing mode. Lowercase 'staff' | 'client'; defaults to 'client'
+    # so the safe (public-only) behaviour wins when the frontend omits the field.
+    mode: Mode = "client"
     top_k: int = Field(default=5, ge=1, le=20)
 
 
 class RetrieveResponse(BaseModel):
     question: str
+    # Echoed back as the lowercase form the frontend sent in.
     mode: Mode
     chunks: List[RetrievedChunk]
     answer: str

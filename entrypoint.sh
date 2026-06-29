@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Safe default so envsubst renders a valid odoo.conf even when the host
+# .env did not export ODOO_LONGPOLLING_PORT (leaves literal "${...}" in
+# gevent_port otherwise, which makes odoo crash on startup).
+export ODOO_LONGPOLLING_PORT="${ODOO_LONGPOLLING_PORT:-8072}"
+
 ADDONS_ROOT="/mnt/extra-addons"
 OCA_ROOT="${ADDONS_ROOT}/oca"
 CUSTOM_ROOT="${ADDONS_ROOT}/custom"
