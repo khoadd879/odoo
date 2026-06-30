@@ -1,0 +1,18 @@
+services:
+  document-ai:
+    build:
+      context: ./services/document_ai_api
+    container_name: odoo-document-ai
+    ports:
+      - "9100:9100"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - default
+    restart: unless-stopped
+
+  odoo:
+    environment:
+      - DOCUMENT_AI_URL=http://document-ai:9100
+    depends_on:
+      - document-ai

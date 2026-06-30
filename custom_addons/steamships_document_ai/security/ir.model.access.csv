@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_steamships_bill_lading,steamships.bill.lading,model_steamships_bill_lading,base.group_user,1,1,1,1
+access_steamships_invoice_ocr,steamships.invoice.ocr,model_steamships_invoice_ocr,base.group_user,1,1,1,1
+access_steamships_document_upload_wizard,steamships.document.upload.wizard,model_steamships_document_upload_wizard,base.group_user,1,1,1,1
