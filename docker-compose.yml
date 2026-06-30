@@ -43,9 +43,9 @@ services:
       MAIL_SMTP_FROM_NAME: ${MAIL_SMTP_FROM_NAME}
       GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
-      - ./addons:/mnt/extra-addons
+      - ./addons:/mnt/extra-addons/oca
       - ./odoo-data:/var/lib/odoo
-      - ./custom_addons:/mnt/extra-addons
+      - ./custom_addons:/mnt/extra-addons/custom
     ports:
       - "${ODOO_HTTP_PORT:-8069}:8069"
       - "${ODOO_LONGPOLLING_PORT:-8072}:8072"

@@ -5,6 +5,9 @@ set -euo pipefail
 # .env did not export ODOO_LONGPOLLING_PORT (leaves literal "${...}" in
 # gevent_port otherwise, which makes odoo crash on startup).
 export ODOO_LONGPOLLING_PORT="${ODOO_LONGPOLLING_PORT:-8072}"
+# OCA branch — default to Odoo 19.0 since this prototype targets 19 Community.
+# Override in .env: OCA_BRANCH=19.0 (or 18.0 / 17.0 if needed).
+export OCA_BRANCH="${OCA_BRANCH:-19.0}"
 
 ADDONS_ROOT="/mnt/extra-addons"
 OCA_ROOT="${ADDONS_ROOT}/oca"
@@ -47,8 +50,8 @@ for short in "${!OCA_REPOS[@]}"; do
   fi
 
   if [[ ! -d "${target}" ]]; then
-    echo "[entrypoint] Cloning OCA/${repo} (branch 18.0, sha ${sha})"
-    git clone --branch 18.0 --depth 1 "https://github.com/OCA/${repo}.git" "${target}" || {
+    echo "[entrypoint] Cloning OCA/${repo} (branch ${OCA_BRANCH}, sha ${sha})"
+    git clone --branch "${OCA_BRANCH}" --depth 1 "https://github.com/OCA/${repo}.git" "${target}" || {
       echo "[entrypoint] WARN: clone failed for OCA/${repo}, continuing"
       continue
     }

@@ -9,8 +9,8 @@ corrections are merged in-place and two top-level flags are added:
     "vision_ai_warning":     str | None
 
 ponytail: env contract — supports VISION_AI_ENABLED / VISION_AI_MODEL /
-VISION_AI_FALLBACK_MODEL / GEMINI_API_KEY. Upgrade when we add multiple
-providers (currently Gemini-only).
+VISION_AI_FALLBACK_MODEL / VISION_AI_ENABLE_BOL / VISION_AI_ENABLE_INVOICE /
+GEMINI_API_KEY. Upgrade when we add multiple providers (currently Gemini-only).
 """
 
 from __future__ import annotations
@@ -32,28 +32,32 @@ logger = logging.getLogger("document_ai.vision")
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# Fields that, if empty or low-confidence, are worth sending to Gemini.
-# Mirrors the pretty-name map in main.summarise() so the AI prompt stays
-# focused on what the reviewer actually sees as broken.
+# Spec-defined Bill of Lading priority set. Keep this list frozen; the
+# spec dict is the source of truth.
 PRIORITY_KEYS = {
     "bl_number",
     "shipper",
     "consignee",
-    "notify_party",
     "vessel_name",
     "voyage_number",
+    "container_numbers",
     "port_of_loading",
     "port_of_discharge",
-    "place_of_acceptance",
-    "place_of_delivery",
-    "container_numbers",
     "cargo_description",
     "weight",
+    "document_date",
+}
+
+# Non-priority B/L fields still useful for general cleanup; not in the spec
+# list but kept so the AI can fix obvious misses (notify party, ports etc.)
+EXTRA_BOL_KEYS = {
+    "notify_party",
+    "place_of_acceptance",
+    "place_of_delivery",
     "measurement",
     "freight_terms",
     "delivery_agent",
     "reference_invoice_number",
-    "document_date",
 }
 
 INVOICE_PRIORITY_KEYS = {
@@ -68,7 +72,12 @@ INVOICE_PRIORITY_KEYS = {
     "payment_terms",
 }
 
-LOW = {"low", "medium"}  # treat medium as needing review for priority fields
+# Treat low and medium as candidates for AI rescue on priority fields only.
+LOW_FOR_AI = {"low", "medium"}
+
+
+def _truthy(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).strip().lower() == "true"
 
 
 @dataclass(frozen=True)
@@ -79,18 +88,22 @@ class VisionConfig:
     fallback_model: str
     api_key: str
     timeout_s: float
+    enable_bol: bool
+    enable_invoice: bool
 
     @classmethod
     def from_env(cls) -> "VisionConfig":
         return cls(
-            enabled=os.environ.get("VISION_AI_ENABLED", "false").lower() == "true",
+            enabled=_truthy("VISION_AI_ENABLED", "false"),
             provider=os.environ.get("VISION_AI_PROVIDER", "gemini").lower(),
             model=os.environ.get("VISION_AI_MODEL", "gemini-3-flash-preview"),
             fallback_model=os.environ.get(
                 "VISION_AI_FALLBACK_MODEL", "gemini-3.1-flash-lite"
             ),
             api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
-            timeout_s=float(os.environ.get("VISION_AI_TIMEOUT_S", "20")),
+            timeout_s=float(os.environ.get("VISION_AI_TIMEOUT_S", "90")),
+            enable_bol=_truthy("VISION_AI_ENABLE_BOL", "true"),
+            enable_invoice=_truthy("VISION_AI_ENABLE_INVOICE", "false"),
         )
 
 
@@ -99,13 +112,7 @@ def fields_needing_ai(
     confidences: dict[str, str],
     important: Iterable[str],
 ) -> list[str]:
-    """Return keys that are empty, low-confidence, or invalid-looking.
-
-    Validation rules:
-    * empty after strip
-    * confidence in {low, medium} (medium = needs review for priority fields)
-    * matches a placeholder pattern ("n/a", "unreadable", "???")
-    """
+    """Return keys that are empty, low-confidence, invalid, or placeholder."""
     placeholder = re.compile(r"^(n/?a|unreadable|unknown|none|-+|\?+)$", re.IGNORECASE)
     needs: list[str] = []
     for key in important:
@@ -117,7 +124,10 @@ def fields_needing_ai(
         if placeholder.match(value):
             needs.append(key)
             continue
-        if conf in LOW:
+        if conf in LOW_FOR_AI:
+            needs.append(key)
+            continue
+        if _looks_invalid_value(value):
             needs.append(key)
             continue
     return needs
@@ -125,10 +135,8 @@ def fields_needing_ai(
 
 def _looks_invalid_value(value: str) -> bool:
     """Catch category errors: a date that is also a phone number, etc."""
-    # Too long to be a plausible single field value.
     if len(value) > 240:
         return True
-    # Mostly punctuation / control chars.
     alnum = sum(c.isalnum() for c in value)
     return alnum < max(3, len(value) // 4)
 
@@ -136,45 +144,65 @@ def _looks_invalid_value(value: str) -> bool:
 def merge_ai_corrections(
     fields: dict[str, str],
     confidences: dict[str, str],
-    corrections: dict[str, str],
+    corrections: dict[str, Any],
     important: Iterable[str],
-) -> tuple[dict[str, str], dict[str, str], list[str]]:
+) -> tuple[dict[str, str], dict[str, str], list[str], list[str]]:
     """Apply AI corrections ONLY to keys still empty/low/invalid.
 
-    Important: never overwrite a high-confidence field, even if the LLM
-    returned something. Returns (fields, confidences, merged_keys).
+    The corrections payload is flexible:
+      {"field": "value"}                                  -> assume medium AI conf
+      {"field": {"value": "...", "confidence": "high"}}    -> use provided conf
+
+    Returns: (fields, confidences, merged_keys, low_confidence_keys).
+
+    Spec rule: never overwrite a high-confidence local value; if Gemini
+    returns low confidence, write the value but flag it for human review.
     """
+    placeholder = re.compile(r"^(n/?a|unreadable|unknown|none|-+|\?+)$", re.IGNORECASE)
+    important_set = set(important)
     merged: list[str] = []
-    for key, new_val in corrections.items():
-        if key not in important:
+    ai_low_conf: list[str] = []
+
+    for key, raw in corrections.items():
+        if key not in important_set:
             continue
-        new_val = (new_val or "").strip()
+        if isinstance(raw, dict):
+            new_val = (raw.get("value") or "").strip()
+            ai_conf = (raw.get("confidence") or "medium").lower()
+        else:
+            new_val = (str(raw) or "").strip()
+            ai_conf = "medium"
         if not new_val:
             continue
         old = (fields.get(key) or "").strip()
         conf = confidences.get(key, "medium")
-        placeholder = re.compile(r"^(n/?a|unreadable|unknown|none|-+|\?+)$", re.IGNORECASE)
         should_replace = (
             not old
             or conf == "low"
             or (conf == "medium" and (not old or placeholder.match(old)))
             or _looks_invalid_value(old)
         )
-        if should_replace:
-            fields[key] = new_val
+        if not should_replace:
+            logger.info("Skipped AI overwrite on high-confidence field '%s'", key)
+            continue
+        fields[key] = new_val
+        # Confidence promotion rules: spec says AI high/medium -> use, AI low ->
+        # write but flag for review.
+        if ai_conf == "high":
             confidences[key] = "high"
-            merged.append(key)
-    return fields, confidences, merged
+        elif ai_conf == "low":
+            confidences[key] = "low"
+            ai_low_conf.append(key)
+        else:
+            confidences[key] = "medium"
+        merged.append(key)
+
+    return fields, confidences, merged, ai_low_conf
 
 
 # ---------------------------------------------------------------------------
-# Gemini call
+# Gemini call helpers
 # ---------------------------------------------------------------------------
-def _to_data_url(image: bytes, mimetype: str) -> str:
-    b64 = base64.b64encode(image).decode("ascii")
-    return f"data:{mimetype};base64,{b64}"
-
-
 def _build_prompt(
     doc_type: str,
     raw_text: str,
@@ -193,7 +221,9 @@ def _build_prompt(
         "Your task: re-inspect the attached image and return ONLY a JSON object "
         "whose keys are exactly the field names in (4) and whose values are the "
         "corrected strings. Do not invent fields that were not requested. "
-        "If a field really is unreadable in the image, set it to an empty string.\n\n"
+        "If a field really is unreadable in the image, set it to an empty string. "
+        "Prefer returning strings; you may add a sibling key {\"value\":...,\"confidence\":\"high|medium|low\"} "
+        "if you want to flag your own confidence.\n\n"
         "Respond with JSON only — no markdown fences, no commentary.\n\n"
         f"Raw OCR text (first 4000 chars):\n{raw_text[:4000]}\n\n"
         f"Current fields:\n{json.dumps(fields, ensure_ascii=False)}\n\n"
@@ -217,32 +247,40 @@ def _extract_json(text: str) -> dict[str, Any]:
         raise
 
 
-def _call_gemini(
-    config: VisionConfig,
-    image_b64: str,
-    prompt: str,
-) -> dict[str, Any]:
-    """Call Gemini, falling back to the lite model on overload/timeouts.
+def _post_gemini(model: str, api_key: str, body: dict, timeout_s: float):
+    if httpx is None:
+        raise RuntimeError("httpx not installed; pip install httpx")
+    with httpx.Client(timeout=timeout_s) as client:
+        r = client.post(
+            GEMINI_ENDPOINT.format(model=model),
+            params={"key": api_key},
+            json=body,
+        )
+        r.raise_for_status()
+        return r.json()
 
-    Returns parsed JSON corrections. Raises on transport failure.
-    """
-    url = GEMINI_ENDPOINT.format(model=config.model)
-    params = {"key": config.api_key}
-    payload = {
-        "contents": [
+
+def _extract_text(blob: dict) -> str:
+    try:
+        return blob["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response shape: {blob!r}") from exc
+
+
+def _build_body(prompt: str, inline_image: tuple[bytes, str] | None) -> dict:
+    parts: list[dict] = [{"text": prompt}]
+    if inline_image is not None:
+        blob, mimetype = inline_image
+        parts.append(
             {
-                "role": "user",
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": image_b64.split(";", 1)[0].split(":", 1)[1],
-                            "data": image_b64.split(",", 1)[1],
-                        }
-                    },
-                ],
+                "inline_data": {
+                    "mime_type": mimetype,
+                    "data": base64.b64encode(blob).decode("ascii"),
+                }
             }
-        ],
+        )
+    return {
+        "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "temperature": 0.0,
             "responseMimeType": "application/json",
@@ -250,32 +288,47 @@ def _call_gemini(
         },
     }
 
-    def _post(model: str) -> dict[str, Any]:
-        if httpx is None:
-            raise RuntimeError("httpx not installed; pip install httpx")
-        with httpx.Client(timeout=config.timeout_s) as client:
-            r = client.post(
-                GEMINI_ENDPOINT.format(model=model),
-                params={"key": config.api_key},
-                json=payload,
-            )
-            r.raise_for_status()
-            body = r.json()
-        try:
-            text = body["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError) as exc:
-            raise RuntimeError(f"Unexpected Gemini response shape: {body!r}") from exc
-        return _extract_json(text)
+
+def _call_gemini(
+    cfg: VisionConfig, body: dict, attempt_model: str | None = None
+) -> tuple[dict[str, Any], str]:
+    """Call Gemini, then possibly retry once on the lite fallback model.
+
+    Returns (parsed_corrections, model_used). Raises on transport failure.
+    """
+    primary = attempt_model or cfg.model
+
+    def _try(model: str) -> dict[str, Any]:
+        blob = _post_gemini(model, cfg.api_key, body, cfg.timeout_s)
+        return _extract_json(_extract_text(blob))
 
     try:
-        return _post(config.model)
-    except httpx.HTTPStatusError as exc:
-        # 429/503/529 => retry on the lite fallback.
-        status = exc.response.status_code if exc.response is not None else 0
-        if status in (429, 500, 502, 503, 504, 529) and config.fallback_model != config.model:
-            logger.warning("Gemini %s failed (%s), retrying with %s", config.model, status, config.fallback_model)
-            return _post(config.fallback_model)
+        return _try(primary), primary
+    except Exception as exc:  # httpx.HTTPStatusError or similar
+        status = getattr(getattr(exc, "response", None), "status_code", 0) or 0
+        if status in (429, 500, 502, 503, 504, 529) and cfg.fallback_model and cfg.fallback_model != primary:
+            logger.warning(
+                "Gemini %s failed (status=%s). Retrying with fallback %s.",
+                primary, status, cfg.fallback_model,
+            )
+            blob = _post_gemini(cfg.fallback_model, cfg.api_key, body, cfg.timeout_s)
+            return _extract_json(_extract_text(blob)), cfg.fallback_model
         raise
+
+
+def _ai_disabled_reason(cfg: VisionConfig, doc_type: str) -> str | None:
+    """Human-readable skip-reason; None means AI is armed for this doc type."""
+    if not cfg.enabled:
+        return "Vision AI disabled (VISION_AI_ENABLED=false)."
+    if cfg.provider != "gemini":
+        return f"Vision AI provider '{cfg.provider}' not supported (only 'gemini' today)."
+    if not cfg.api_key:
+        return "GEMINI_API_KEY is not configured."
+    if doc_type == "bill_of_lading" and not cfg.enable_bol:
+        return "Vision AI disabled for Bill of Lading (VISION_AI_ENABLE_BOL=false)."
+    if doc_type == "invoice" and not cfg.enable_invoice:
+        return "Vision AI disabled for invoices (VISION_AI_ENABLE_INVOICE=false)."
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -289,140 +342,71 @@ def maybe_ai_boost(
     raw_text: str,
     fields: dict[str, str],
     confidences: dict[str, str],
-) -> tuple[dict[str, str], dict[str, str], bool, str | None]:
-    """If the priority fields need help, ask Gemini; otherwise return as-is.
+) -> tuple[dict[str, str], dict[str, str], bool, str | None, list[str]]:
+    """If priority fields need help, ask Gemini; otherwise return as-is.
 
-    Returns (fields, confidences, vision_ai_used, warning).
+    Returns (fields, confidences, vision_ai_used, warning, ai_low_conf_keys).
 
-    vision_ai_used = True if Gemini was called AND returned corrections.
-    warning is set when Gemini was called but failed (the caller will surface
-    it under "vision_ai_warning" without breaking the schema).
+    * ``vision_ai_used`` — True iff Gemini was called AND produced corrections.
+    * ``warning`` — set when Gemini was called but failed.
+    * ``ai_low_conf_keys`` — fields where AI returned low confidence; caller
+       bubbles them into ``low_confidence_notes`` for the reviewer.
     """
-    important = INVOICE_PRIORITY_KEYS if doc_type == "invoice" else (
-        PRIORITY_KEYS if doc_type == "bill_of_lading" else set()
-    )
+    # Build the priority set per spec: BOL spec list +/- invoice list.
+    if doc_type == "bill_of_lading":
+        important = PRIORITY_KEYS | EXTRA_BOL_KEYS
+    elif doc_type == "invoice":
+        important = INVOICE_PRIORITY_KEYS
+    else:
+        important = set()
+
     needs = fields_needing_ai(fields, confidences, important)
     if not needs:
-        return fields, confidences, False, None
+        logger.info("AI fallback skipped: all priority fields already validated (doc_type=%s)", doc_type)
+        return fields, confidences, False, None, []
 
     cfg = VisionConfig.from_env()
-    if not cfg.enabled:
-        return fields, confidences, False, "Vision AI disabled (VISION_AI_ENABLED=false)."
-    if cfg.provider != "gemini" or not cfg.api_key:
-        return fields, confidences, False, (
-            f"Vision AI not configured (provider={cfg.provider!r}, key={'set' if cfg.api_key else 'missing'})."
-        )
-    if not file_bytes:
-        return fields, confidences, False, "No image bytes to send to Vision AI."
+    skip_reason = _ai_disabled_reason(cfg, doc_type)
+    if skip_reason:
+        logger.info("AI fallback skipped: %s", skip_reason)
+        return fields, confidences, False, skip_reason, []
 
-    # PDFs: send the raw OCR text only (Gemini inline_data expects an image).
-    # Single-page PNG/JPG: send the bytes as inline_data.
-    inline_mime = mimetype if mimetype and mimetype.startswith("image/") else None
-    if inline_mime is None:
-        # Skip the image part; fall back to text-only correction.
-        image_part = None
-    else:
-        image_part = _to_data_url(file_bytes, inline_mime)
+    if not file_bytes:
+        logger.warning("AI fallback skipped: no file bytes available to send.")
+        return fields, confidences, False, "No document bytes available for Vision AI.", []
+
+    # Image path: send inline_data when mimetype is image/*. Text-only otherwise.
+    inline: tuple[bytes, str] | None = None
+    if mimetype and mimetype.startswith("image/"):
+        inline = (file_bytes, mimetype)
 
     prompt = _build_prompt(doc_type, raw_text, fields, confidences, needs)
-    if image_part:
-        prompt = prompt  # image is appended below as a multimodal part
-    payload_prompt = prompt
+    body = _build_body(prompt, inline)
 
     try:
-        if image_part:
-            url = GEMINI_ENDPOINT.format(model=cfg.model)
-            body = {
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {"text": payload_prompt},
-                            {
-                                "inline_data": {
-                                    "mime_type": inline_mime,
-                                    "data": base64.b64encode(file_bytes).decode("ascii"),
-                                }
-                            },
-                        ],
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.0,
-                    "responseMimeType": "application/json",
-                    "maxOutputTokens": 1024,
-                },
-            }
-
-            def _post(model: str) -> dict[str, Any]:
-                with httpx.Client(timeout=cfg.timeout_s) as client:
-                    r = client.post(
-                        GEMINI_ENDPOINT.format(model=model),
-                        params={"key": cfg.api_key},
-                        json=body,
-                    )
-                    r.raise_for_status()
-                    blob = r.json()
-                text = blob["candidates"][0]["content"]["parts"][0]["text"]
-                return _extract_json(text)
-
-            try:
-                corrections = _post(cfg.model)
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code if exc.response is not None else 0
-                if status in (429, 500, 502, 503, 504, 529) and cfg.fallback_model != cfg.model:
-                    logger.warning(
-                        "Gemini %s failed (%s), retrying with %s",
-                        cfg.model, status, cfg.fallback_model,
-                    )
-                    corrections = _post(cfg.fallback_model)
-                else:
-                    raise
-        else:
-            # Text-only path (PDF without per-page render): Gemini receives a
-            # cheap text-only prompt; we warn because the spec promised image.
-            logger.info("Vision AI: no inline image (mimetype=%s) — using text-only prompt", mimetype)
-            corrections = _call_gemini_text(cfg, payload_prompt)
+        logger.info(
+            "AI fallback triggered: doc_type=%s, model=%s, fields=%d (%s)",
+            doc_type, cfg.model, len(needs), ",".join(sorted(needs)),
+        )
+        corrections, model_used = _call_gemini(cfg, body)
     except Exception as exc:
-        logger.warning("Gemini fallback failed: %s", exc)
-        return fields, confidences, False, f"Vision AI failed: {exc.__class__.__name__}: {exc}"
+        # Spec wording: "AI fallback failed; using local OCR result."
+        logger.warning("AI fallback failed: %s: %s", exc.__class__.__name__, exc)
+        return fields, confidences, False, "AI fallback failed; using local OCR result.", []
 
-    if not isinstance(corrections, dict):
-        corrections = {}
-    fields, confidences, merged = merge_ai_corrections(fields, confidences, corrections, important)
+    if not isinstance(corrections, dict) or not corrections:
+        logger.info("AI fallback returned no usable corrections (model=%s)", model_used)
+        return fields, confidences, False, "Vision AI returned no usable corrections.", []
+
+    fields, confidences, merged, ai_low_conf = merge_ai_corrections(
+        fields, confidences, corrections, important
+    )
     if not merged:
-        return fields, confidences, False, "Vision AI returned no usable corrections."
-    logger.info("Vision AI merged %d fields: %s", len(merged), merged)
-    return fields, confidences, True, None
+        logger.info("AI fallback: model %s returned keys, but none replaced weak fields.", model_used)
+        return fields, confidences, False, "Vision AI returned no usable corrections.", ai_low_conf
 
-
-def _call_gemini_text(cfg: VisionConfig, prompt: str) -> dict[str, Any]:
-    """Text-only Gemini call (used when no inline image is available)."""
-    body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.0,
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 1024,
-        },
-    }
-
-    def _post(model: str) -> dict[str, Any]:
-        with httpx.Client(timeout=cfg.timeout_s) as client:
-            r = client.post(
-                GEMINI_ENDPOINT.format(model=model),
-                params={"key": cfg.api_key},
-                json=body,
-            )
-            r.raise_for_status()
-            blob = r.json()
-        text = blob["candidates"][0]["content"]["parts"][0]["text"]
-        return _extract_json(text)
-
-    try:
-        return _post(cfg.model)
-    except httpx.HTTPStatusError as exc:
-        status = exc.response.status_code if exc.response is not None else 0
-        if status in (429, 500, 502, 503, 504, 529) and cfg.fallback_model != cfg.model:
-            return _post(cfg.fallback_model)
-        raise
+    logger.info(
+        "AI fallback succeeded: model=%s, merged=%d, low_conf=%d (%s)",
+        model_used, len(merged), len(ai_low_conf), ",".join(ai_low_conf) or "none",
+    )
+    return fields, confidences, True, None, ai_low_conf

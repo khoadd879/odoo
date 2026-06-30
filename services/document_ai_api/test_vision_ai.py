@@ -73,7 +73,7 @@ def t_merge_overwrites_only_weak():
         "container_numbers": "OVERRIDE-XYZ",   # should NOT be applied (high)
         "unknown_key": "ignored",
     }
-    new_fields, new_confs, merged = merge_ai_corrections(
+    new_fields, new_confs, merged, ai_low = merge_ai_corrections(
         dict(fields), dict(confs), ai, fields.keys()
     )
     assert new_fields["bl_number"] == "ZZ-123", "high-confidence field got clobbered"
@@ -82,17 +82,35 @@ def t_merge_overwrites_only_weak():
     assert new_fields["voyage_number"] == "V.1000N"
     assert new_fields["port_of_discharge"] == "TOKYO, JAPAN"
     assert new_fields["container_numbers"] == "AAAU1234567", "high confidence container number got clobbered"
-    assert new_confs["shipper"] == "high"
-    assert new_confs["vessel_name"] == "high"
+    # AI returned plain strings → confidence defaults to medium per spec.
+    assert new_confs["shipper"] == "medium"
+    assert new_confs["vessel_name"] == "medium"
     assert sorted(merged) == ["port_of_discharge", "shipper", "vessel_name", "voyage_number"], merged
+    assert ai_low == []
     print("ok: merge_ai_corrections")
+
+
+def t_merge_propagates_ai_low_conf():
+    fields = {"shipper": "", "vessel_name": ""}
+    confs = {"shipper": "low", "vessel_name": "low"}
+    ai = {
+        "shipper": {"value": "Some Co", "confidence": "low"},
+        "vessel_name": {"value": "AAA THAILAND", "confidence": "high"},
+    }
+    new_fields, new_confs, merged, ai_low = merge_ai_corrections(fields, confs, ai, fields.keys())
+    assert new_fields["shipper"] == "Some Co"
+    assert new_confs["shipper"] == "low"
+    assert new_confs["vessel_name"] == "high"
+    assert sorted(merged) == ["shipper", "vessel_name"]
+    assert ai_low == ["shipper"]
+    print("ok: merge_ai_corrections propagates AI low-confidence flags")
 
 
 def t_merge_skips_empty_ai():
     fields = {"shipper": "", "vessel_name": ""}
     confs = {"shipper": "low", "vessel_name": "low"}
     ai = {"shipper": "", "vessel_name": "   "}
-    new_fields, new_confs, merged = merge_ai_corrections(fields, confs, ai, fields.keys())
+    new_fields, new_confs, merged, _ = merge_ai_corrections(fields, confs, ai, fields.keys())
     assert merged == [], f"empty AI values should not merge; got {merged}"
     assert new_fields == {"shipper": "", "vessel_name": ""}
     print("ok: merge_ai_corrections skips empty corrections")
@@ -102,7 +120,7 @@ def t_invalid_value_replaced():
     fields = {"vendor_name": "$$$$$"}  # mostly punctuation -> invalid
     confs = {"vendor_name": "low"}
     ai = {"vendor_name": "Real Vendor Co."}
-    new_fields, _, merged = merge_ai_corrections(fields, confs, ai, fields.keys())
+    new_fields, _, merged, _ = merge_ai_corrections(fields, confs, ai, fields.keys())
     assert merged == ["vendor_name"]
     assert new_fields["vendor_name"] == "Real Vendor Co."
     print("ok: merge_ai_corrections replaces invalid value")
@@ -111,6 +129,7 @@ def t_invalid_value_replaced():
 if __name__ == "__main__":
     t_needs()
     t_merge_overwrites_only_weak()
+    t_merge_propagates_ai_low_conf()
     t_merge_skips_empty_ai()
     t_invalid_value_replaced()
     print("all vision_ai tests passed")
