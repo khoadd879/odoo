@@ -1005,10 +1005,57 @@ async def _read_and_ocr(file: UploadFile) -> tuple[bytes, str, bool]:
     return content, ocr_pages(pages), True
 
 
+def _summarise_with_ai(
+    *,
+    fields: dict,
+    confidences: dict,
+    ai_low_conf_keys: list[str],
+) -> tuple[str, str]:
+    """Compute overall confidence + notes, surfacing AI low-confidence fields."""
+    overall, notes = summarise(fields, confidences)
+    if ai_low_conf_keys:
+        pretty_map = {
+            "bl_number": "B/L number",
+            "shipper": "shipper",
+            "consignee": "consignee",
+            "vessel_name": "vessel name",
+            "voyage_number": "voyage number",
+            "container_numbers": "container numbers",
+            "port_of_loading": "port of loading",
+            "port_of_discharge": "port of discharge",
+            "cargo_description": "cargo description",
+            "weight": "cargo weight",
+            "document_date": "document date",
+            "vendor_name": "vendor name",
+            "invoice_number": "invoice number",
+            "invoice_date": "invoice date",
+            "due_date": "due date",
+            "currency": "currency",
+            "subtotal_amount": "subtotal",
+            "tax_amount": "tax amount",
+            "total_amount": "total amount",
+            "payment_terms": "payment terms",
+            "notify_party": "notify party",
+        }
+        names = [pretty_map.get(k, k.replace("_", " ")) for k in ai_low_conf_keys]
+        ai_note = (
+            "AI-extracted values for: "
+            + ", ".join(names[:-1] + ([f"and {names[-1]}"] if len(names) > 1 else names))
+            + ". Please review."
+        )
+        if notes:
+            notes = f"{notes} {ai_note}"
+        else:
+            notes = ai_note
+    return overall, notes
+
+
 @app.post("/api/ocr/invoice")
 async def ocr_invoice(file: UploadFile = File(...)):
+    logger.info("local OCR started: endpoint=invoice, mimetype=%s", file.content_type)
     content, text, ok = await _read_and_ocr(file)
     if not ok:
+        logger.warning("local OCR failed: could not render document (mimetype=%s)", file.content_type)
         return {
             "error": "render_failed",
             "message": "Could not render document to image. Please upload a clearer scan.",
@@ -1037,7 +1084,8 @@ async def ocr_invoice(file: UploadFile = File(...)):
         }
 
     fields, confidences = extract_invoice(text)
-    fields, confidences, vision_used, vision_warning = maybe_ai_boost(
+    logger.info("local OCR completed: endpoint=invoice, fields=%d, char_count=%d", len(fields), len(text))
+    fields, confidences, vision_used, vision_warning, ai_low_conf = maybe_ai_boost(
         file_bytes=content,
         mimetype=file.content_type,
         doc_type="invoice",
@@ -1045,7 +1093,10 @@ async def ocr_invoice(file: UploadFile = File(...)):
         fields=fields,
         confidences=confidences,
     )
-    overall, notes = summarise(fields, confidences)
+    overall, notes = _summarise_with_ai(
+        fields=fields, confidences=confidences, ai_low_conf_keys=ai_low_conf
+    )
+    logger.info("final overall confidence: endpoint=invoice, level=%s", overall)
     return {
         "document_type": "invoice",
         "detected_document_type": "invoice",
@@ -1061,8 +1112,10 @@ async def ocr_invoice(file: UploadFile = File(...)):
 
 @app.post("/api/ocr/bill-of-lading")
 async def ocr_bill_of_lading(file: UploadFile = File(...)):
+    logger.info("local OCR started: endpoint=bill_of_lading, mimetype=%s", file.content_type)
     content, text, ok = await _read_and_ocr(file)
     if not ok:
+        logger.warning("local OCR failed: could not render document (mimetype=%s)", file.content_type)
         return {
             "error": "render_failed",
             "message": "Could not render document to image. Please upload a clearer scan.",
@@ -1071,7 +1124,11 @@ async def ocr_bill_of_lading(file: UploadFile = File(...)):
 
     detected = detect_document_type(text)
     fields, confidences = extract_bill_of_lading(text)
-    fields, confidences, vision_used, vision_warning = maybe_ai_boost(
+    logger.info(
+        "local OCR completed: endpoint=bill_of_lading, fields=%d, char_count=%d, detected=%s",
+        len(fields), len(text), detected,
+    )
+    fields, confidences, vision_used, vision_warning, ai_low_conf = maybe_ai_boost(
         file_bytes=content,
         mimetype=file.content_type,
         doc_type="bill_of_lading",
@@ -1079,7 +1136,10 @@ async def ocr_bill_of_lading(file: UploadFile = File(...)):
         fields=fields,
         confidences=confidences,
     )
-    overall, notes = summarise(fields, confidences)
+    overall, notes = _summarise_with_ai(
+        fields=fields, confidences=confidences, ai_low_conf_keys=ai_low_conf
+    )
+    logger.info("final overall confidence: endpoint=bill_of_lading, level=%s", overall)
     # We always return the B/L schema. ``detected_document_type`` surfaces
     # the classifier's call so the wizard can reject a pure-invoice doc.
     return {

@@ -1,23 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- ============================================================ -->
+    <!-- Supplier Invoice OCR Records                                  -->
+    <!-- ============================================================ -->
+
     <record id="view_steamships_invoice_ocr_tree" model="ir.ui.view">
         <field name="name">steamships.invoice.ocr.tree</field>
         <field name="model">steamships.invoice.ocr</field>
         <field name="arch" type="xml">
-            <list string="Supplier Invoices" decoration-info="state == 'pending_review'"
-                  decoration-success="state == 'approved'" decoration-danger="state == 'rejected'">
+            <list string="Supplier Invoice OCR Reviews"
+                  create="0"
+                  decoration-info="state == 'pending_review'"
+                  decoration-success="state == 'approved'"
+                  decoration-danger="state == 'rejected'">
                 <field name="name"/>
-                <field name="vendor_name"/>
                 <field name="invoice_number"/>
+                <field name="vendor_name"/>
                 <field name="invoice_date"/>
-                <field name="currency"/>
+                <field name="due_date"/>
                 <field name="total_amount"/>
-                <field name="overall_confidence"/>
+                <field name="currency"/>
+                <field name="overall_confidence" widget="badge"
+                       decoration-info="overall_confidence == 'high'"
+                       decoration-warning="overall_confidence == 'medium'"
+                       decoration-danger="overall_confidence == 'low'"/>
                 <field name="state" widget="badge"
                        decoration-info="state == 'pending_review'"
                        decoration-success="state == 'approved'"
                        decoration-danger="state == 'rejected'"/>
+                <field name="create_date"/>
+                <field name="reviewer_id" widget="many2one_avatar_user"/>
+                <field name="approved_date"/>
             </list>
+        </field>
+    </record>
+
+    <record id="view_steamships_invoice_ocr_search" model="ir.ui.view">
+        <field name="name">steamships.invoice.ocr.search</field>
+        <field name="model">steamships.invoice.ocr</field>
+        <field name="arch" type="xml">
+            <search string="Supplier Invoice OCR Reviews">
+                <field name="name" string="Reference"/>
+                <field name="invoice_number" string="Invoice Number"/>
+                <field name="vendor_name"/>
+                <field name="invoice_date"/>
+                <field name="reviewer_id" operator="child_of"/>
+                <separator/>
+                <filter string="Pending Review"
+                        name="filter_pending_review"
+                        domain="[('state', '=', 'pending_review')]"/>
+                <filter string="Approved"
+                        name="filter_approved"
+                        domain="[('state', '=', 'approved')]"/>
+                <filter string="Rejected"
+                        name="filter_rejected"
+                        domain="[('state', '=', 'rejected')]"/>
+                <group>
+                    <filter string="Status" name="group_state"
+                            context="{'group_by': 'state'}"/>
+                    <filter string="Reviewer" name="group_reviewer"
+                            context="{'group_by': 'reviewer_id'}"/>
+                    <filter string="Created On" name="group_create_date"
+                            context="{'group_by': 'create_date'}"/>
+                </group>
+            </search>
         </field>
     </record>
 
@@ -25,7 +71,7 @@
         <field name="name">steamships.invoice.ocr.form</field>
         <field name="model">steamships.invoice.ocr</field>
         <field name="arch" type="xml">
-            <form string="Supplier Invoice">
+            <form string="Supplier Invoice OCR Review" create="0">
                 <header>
                     <button name="action_approve" string="Approve" type="object"
                             class="btn-primary"
@@ -72,6 +118,13 @@
                         </group>
                     </group>
 
+                    <group string="Review Trail" name="review_trail">
+                        <group>
+                            <field name="reviewer_id" readonly="1"/>
+                            <field name="approved_date" readonly="1"/>
+                        </group>
+                    </group>
+
                     <notebook>
                         <page string="Original Document" name="original_doc">
                             <group>
@@ -95,10 +148,22 @@
         </field>
     </record>
 
+    <!-- Action: default filter = Pending Review; user can clear it. -->
     <record id="action_steamships_invoice_ocr" model="ir.actions.act_window">
-        <field name="name">Supplier Invoices</field>
+        <field name="name">Supplier Invoice OCR Reviews</field>
         <field name="res_model">steamships.invoice.ocr</field>
         <field name="view_mode">list,form</field>
         <field name="view_id" ref="view_steamships_invoice_ocr_tree"/>
+        <field name="search_view_id" ref="view_steamships_invoice_ocr_search"/>
+        <field name="context">{'search_default_filter_pending_review': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No supplier invoice OCR records yet.
+            </p>
+            <p>
+                Upload a supplier invoice via <em>Document AI &gt; Upload Document for OCR</em>
+                to start. Approved records will appear here once you mark them.
+            </p>
+        </field>
     </record>
 </odoo>

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Google Calendar Settings — QWeb page rendered by
+             ``controllers/google_calendar.py``.
+             ============================================================ -->
+        <template id="google_calendar_settings"
+                  name="Steamships — Google Calendar Settings">
+            <t t-call="web.login_layout">
+                <t t-set="title">Google Calendar Settings</t>
+
+                <div class="ssbk-wrap" style="max-width: 640px;">
+                    <div class="ssbk-card">
+                        <h1 class="ssbk-title">Google Calendar Settings</h1>
+                        <p class="ssbk-subtitle">
+                            Optional push from Steamships Smart Booking
+                            to your personal Google Calendar.
+                        </p>
+
+                        <t t-if="status">
+                            <div t-attf-class="ssbk-banner ssbk-banner-#{status}">
+                                <t t-esc="status_message"/>
+                            </div>
+                        </t>
+
+                        <table class="ssbk-meta">
+                            <tr>
+                                <th>Status</th>
+                                <td>
+                                    <t t-if="user_payload.get('connected')">
+                                        <span class="ssbk-pill ssbk-pill-ok">
+                                            Connected
+                                        </span>
+                                    </t>
+                                    <t t-else="">
+                                        <span class="ssbk-pill ssbk-pill-muted">
+                                            Not connected
+                                        </span>
+                                    </t>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Connected Google Calendar ID</th>
+                                <td>
+                                    <code t-esc="user_payload.get('calendar_id') or 'primary'"/>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <p class="ssbk-helper">
+                            <b>Prototype integration:</b>
+                            Odoo creates the meeting first.
+                            If Google Calendar is connected, the event is
+                            pushed to Google Calendar automatically.
+                        </p>
+
+                        <div class="ssbk-actions">
+                            <t t-if="user_payload.get('connected')">
+                                <a t-att-href="disconnect_url"
+                                   class="ssbk-btn ssbk-btn-danger">
+                                    Disconnect Google Calendar
+                                </a>
+                            </t>
+                            <t t-else="">
+                                <a t-att-href="connect_url"
+                                   t-att-disabled="'disabled' if not configured else None"
+                                   t-attf-class="ssbk-btn ssbk-btn-primary #{'ssbk-btn-disabled' if not configured else ''}">
+                                    Connect Google Calendar
+                                </a>
+                            </t>
+                        </div>
+
+                        <t t-if="not configured">
+                            <p class="ssbk-helper ssbk-helper-warn">
+                                Google Calendar integration is not configured.
+                                Set the following system parameters or
+                                environment variables before connecting:
+                                <code>steamships_google_calendar_client_id</code>,
+                                <code>steamships_google_calendar_client_secret</code>,
+                                and
+                                <code>steamships_google_calendar_redirect_uri</code>.
+                            </p>
+                        </t>
+
+                    </div>
+                </div>
+            </t>
+        </template>
+
+        <!-- ============================================================
+             Calendar → Google Calendar Settings menu item
+             (under the existing Smart Booking menu).
+             ============================================================ -->
+        <record id="action_google_calendar_settings"
+                model="ir.actions.act_url">
+            <field name="name">Google Calendar Settings</field>
+            <field name="url">/steamships/google_calendar/settings</field>
+            <field name="target">self</field>
+        </record>
+
+        <menuitem id="menu_google_calendar_settings"
+                  name="Google Calendar Settings"
+                  parent="menu_smart_booking_main"
+                  sequence="30"
+                  action="action_google_calendar_settings"
+                  groups="base.group_user"/>
+
+    </data>
+</odoo>

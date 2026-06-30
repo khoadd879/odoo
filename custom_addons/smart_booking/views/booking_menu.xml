@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <!--
+            The Smart Booking menus live in
+            ``views/smart_booking_actions.xml``. This file is kept as a
+            no-op so existing xpath references / external imports that
+            look for it by name keep resolving after upgrades.
+        -->
+    </data>
+</odoo>

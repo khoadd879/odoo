@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Add Google Calendar sync fields on the native
+             ``calendar.event`` form. We hook into the standard
+             ``calendar.view_calendar_event_form`` so the new fields
+             show up everywhere the native form is used (also Smart
+             Booking's filtered calendar events).
+             ============================================================ -->
+        <record id="view_calendar_event_form_google_calendar"
+                model="ir.ui.view">
+            <field name="name">calendar.event.form.steamships.google_calendar</field>
+            <field name="model">calendar.event</field>
+            <field name="inherit_id" ref="calendar.view_calendar_event_form"/>
+            <field name="priority">99</field>
+            <field name="arch" type="xml">
+                <!-- Google Calendar sync group at the bottom of the form.
+                     In a real project we would put it inside the existing
+                     notebook; here we just append a labelled group on the
+                     sheet so it stays visible from any variant of the
+                     native form. -->
+                <xpath expr="//sheet" position="after">
+                    <group name="ssbk_google_calendar"
+                           string="Google Calendar Sync (optional)"
+                           col="2"
+                           groups="base.group_user">
+                        <field name="x_google_calendar_synced" readonly="1"/>
+                        <field name="x_google_calendar_event_id" readonly="1"/>
+                        <field name="x_google_calendar_sync_error" readonly="1"/>
+                    </group>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- ============================================================
+             List view: show sync status on the Smart Booking list and
+             the native calendar.list. We don't want to pollute ALL
+             calendar.event lists (some users use calendar for non-booking
+             purposes), so we inherit the *Smart Booking* filtered list
+             action by reusing the existing list record's tree view.
+             ============================================================ -->
+        <record id="view_calendar_event_tree_google_calendar"
+                model="ir.ui.view">
+            <field name="name">calendar.event.list.steamships.google_calendar</field>
+            <field name="model">calendar.event</field>
+            <field name="inherit_id" ref="calendar.view_calendar_event_tree"/>
+            <field name="priority">99</field>
+            <field name="arch" type="xml">
+                <xpath expr="//tree" position="inside">
+                    <field name="x_google_calendar_synced"
+                           string="Google Synced"
+                           optional="show"
+                           decoration-success="x_google_calendar_synced == True"
+                           decoration-muted="x_google_calendar_synced == False"
+                           groups="base.group_user"/>
+                </xpath>
+            </field>
+        </record>
+
+    </data>
+</odoo>

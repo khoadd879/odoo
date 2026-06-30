@@ -5,20 +5,21 @@ services:
     container_name: odoo-document-ai
     ports:
       - "9100:9100"
+    env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
       - VISION_AI_ENABLED=${VISION_AI_ENABLED:-false}
       - VISION_AI_PROVIDER=${VISION_AI_PROVIDER:-gemini}
       - VISION_AI_MODEL=${VISION_AI_MODEL:-gemini-3-flash-preview}
       - VISION_AI_FALLBACK_MODEL=${VISION_AI_FALLBACK_MODEL:-gemini-3.1-flash-lite}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - VISION_AI_TIMEOUT_S=${VISION_AI_TIMEOUT_S:-20}
+      - VISION_AI_TIMEOUT_S=${VISION_AI_TIMEOUT_S:-90}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     networks:
       - default
     restart: unless-stopped
 
   odoo:
     environment:
-      - DOCUMENT_AI_URL=http://document-ai:9100
+      - DOCUMENT_AI_URL=${DOCUMENT_AI_URL:-http://document-ai:9100}
     depends_on:
       - document-ai

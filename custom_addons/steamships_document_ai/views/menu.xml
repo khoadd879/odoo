@@ -1,24 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- Root menu: renamed "Steamships Docs AI" -> "Document AI" -->
     <menuitem id="menu_steamships_docs_ai_root"
-              name="Steamships Docs AI"
+              name="Document AI"
               sequence="60"/>
 
+    <!-- 1) B/L list — fires when user clicks the root "Document AI" item,
+         because Odoo 19 launches the first leaf action when a parent menu
+         has no action of its own. Putting the list-view menu first (sequence
+         5) prevents the wizard from hijacking the click. -->
+    <menuitem id="menu_steamships_docs_ai_bills"
+              name="Bill of Lading OCR Reviews"
+              parent="menu_steamships_docs_ai_root"
+              action="action_steamships_bill_lading"
+              sequence="5"/>
+
+    <!-- 2) Upload wizard. -->
     <menuitem id="menu_steamships_docs_ai_upload"
-              name="Upload &amp; OCR"
+              name="Upload Document for OCR"
               parent="menu_steamships_docs_ai_root"
               action="action_steamships_document_upload"
               sequence="10"/>
 
+    <!-- 3) Supplier Invoice OCR records (list + form). -->
     <menuitem id="menu_steamships_docs_ai_invoices"
-              name="Supplier Invoices"
+              name="Supplier Invoice OCR Reviews"
               parent="menu_steamships_docs_ai_root"
               action="action_steamships_invoice_ocr"
               sequence="20"/>
-
-    <menuitem id="menu_steamships_docs_ai_bills"
-              name="Bills of Lading"
-              parent="menu_steamships_docs_ai_root"
-              action="action_steamships_bill_lading"
-              sequence="30"/>
 </odoo>
