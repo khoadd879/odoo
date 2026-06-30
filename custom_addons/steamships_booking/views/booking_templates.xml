@@ -1,0 +1,695 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Public booking page
+             ============================================================ -->
+        <template id="booking_page" name="Steamships — Book a Meeting">
+            <t t-call="website.layout">
+                <t t-set="title">Book a Steamships Meeting</t>
+                <t t-set="head">
+                    <meta name="robots" content="noindex"/>
+                </t>
+
+                <div class="ssbk-wrap">
+                    <div class="ssbk-card">
+
+                        <!-- Brand strip -->
+                        <div class="ssbk-brand">
+                            <div class="ssbk-brand-mark">
+                                <span>SS</span>
+                            </div>
+                            <div>
+                                <div class="ssbk-brand-name">Steamships</div>
+                                <div class="ssbk-brand-tag">Smart Booking</div>
+                            </div>
+                        </div>
+
+                        <!-- Header -->
+                        <h1 class="ssbk-title">Book a Steamships Meeting</h1>
+                        <p class="ssbk-subtitle">Choose a time that works in your timezone.</p>
+
+                        <t t-if="prefilled.get('lead_id')">
+                            <div class="ssbk-banner">
+                                Booking is linked to lead
+                                <strong>#<t t-esc="prefilled['lead_id']"/></strong>.
+                                We've pre-filled what we can — please confirm.
+                            </div>
+                        </t>
+
+                        <form id="ssbk-form" class="ssbk-form" t-attf-action="/steamships/booking/submit" method="post">
+                            <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                            <input type="hidden" name="lead_id" t-att-value="prefilled.get('lead_id', '')"/>
+
+                            <!-- Meeting type -->
+                            <label class="ssbk-label">Meeting type</label>
+                            <div class="ssbk-meeting-types">
+                                <t t-foreach="meeting_types.items()" t-as="mt">
+                                    <label class="ssbk-mtype">
+                                        <input type="radio" name="meeting_type" t-att-value="mt[0]"
+                                               required="required" t-att-checked="'checked' if mt[0] == 'sales_call_30' else None"/>
+                                        <span class="ssbk-mtype-card">
+                                            <span class="ssbk-mtype-title" t-esc="mt[1]"/>
+                                            <span class="ssbk-mtype-sub">
+                                                <t t-if="mt[0] == 'sales_call_30'">30 min · intro call</t>
+                                                <t t-if="mt[0] == 'onboarding_60'">60 min · kickoff</t>
+                                            </span>
+                                        </span>
+                                    </label>
+                                </t>
+                            </div>
+
+                            <!-- Contact details -->
+                            <div class="ssbk-row">
+                                <div class="ssbk-col">
+                                    <label class="ssbk-label" for="ssbk-name">Your name</label>
+                                    <input id="ssbk-name" name="name" type="text" required="required"
+                                           class="ssbk-input" t-att-value="prefilled.get('name', '')"/>
+                                </div>
+                                <div class="ssbk-col">
+                                    <label class="ssbk-label" for="ssbk-email">Email</label>
+                                    <input id="ssbk-email" name="email" type="email" required="required"
+                                           class="ssbk-input" t-att-value="prefilled.get('email', '')"/>
+                                </div>
+                            </div>
+
+                            <label class="ssbk-label" for="ssbk-company">Company</label>
+                            <input id="ssbk-company" name="company" type="text" class="ssbk-input"
+                                   t-att-value="prefilled.get('company', '')"/>
+
+                            <!-- Timezone -->
+                            <label class="ssbk-label" for="ssbk-timezone">Your timezone</label>
+                            <div class="ssbk-tz-row">
+                                <select id="ssbk-timezone" name="timezone" class="ssbk-select">
+                                    <option value="Pacific/Port_Moresby">Pacific/Port_Moresby (PNG)</option>
+                                    <option value="Asia/Singapore">Asia/Singapore</option>
+                                    <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh</option>
+                                    <option value="Australia/Sydney">Australia/Sydney</option>
+                                </select>
+                                <button type="button" id="ssbk-detect-tz" class="ssbk-tz-btn">
+                                    Detect from browser
+                                </button>
+                            </div>
+                            <div id="ssbk-tz-detected" class="ssbk-tz-hint"></div>
+
+                            <p class="ssbk-mini-note">Times are shown in your selected timezone.</p>
+
+                            <!-- Slot picker -->
+                            <label class="ssbk-label">Pick a slot</label>
+                            <div class="ssbk-slots" id="ssbk-slots">
+                                <div class="ssbk-day" t-foreach="[
+                                    ('Mon', 0),
+                                    ('Tue', 1),
+                                    ('Wed', 2),
+                                    ('Thu', 3),
+                                    ('Fri', 4)]" t-as="day">
+                                    <div class="ssbk-day-label" t-esc="day[0]"/>
+                                    <div class="ssbk-day-slots">
+                                        <t t-foreach="slots" t-as="slot">
+                                            <t t-if="slot['weekday'] == day[1]">
+                                                <button type="button"
+                                                        class="ssbk-slot"
+                                                        data-png-slot="png-wd-..."
+                                                        t-att-data-weekday="slot['weekday']"
+                                                        t-att-data-hour="slot['hour']"
+                                                        t-att-data-minute="slot['minute']"
+                                                        t-att-data-slot-key="'%d_%02d_%02d' % (slot['weekday'], slot['hour'], slot['minute'])"
+                                                        t-att-data-label-png="slot['label_png']">
+                                                    <span class="ssbk-slot-local"><!-- filled by JS --></span>
+                                                    <span class="ssbk-slot-png"><t t-esc="slot['label_png']"/></span>
+                                                </button>
+                                            </t>
+                                        </t>
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" name="slot" id="ssbk-slot-input" required="required"/>
+                            <div id="ssbk-slot-error" class="ssbk-error"></div>
+
+                            <!-- Notes -->
+                            <label class="ssbk-label" for="ssbk-notes">Anything else? (optional)</label>
+                            <textarea id="ssbk-notes" name="notes" rows="3" class="ssbk-input"
+                                      placeholder="What would you like to discuss?"></textarea>
+
+                            <button type="submit" class="ssbk-submit" id="ssbk-submit">
+                                Confirm booking
+                            </button>
+                        </form>
+
+                        <p class="ssbk-footer">
+                            By booking, you agree to receive a calendar invite from Steamships.
+                            Need to reschedule? Just reply to the invite.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- ========================================================
+                     Steamships-style CSS (self-contained, scoped via .ssbk-)
+                     ======================================================== -->
+                <style>
+                    body { background: #071b33; }
+                    .ssbk-wrap {
+                        min-height: calc(100vh - 100px);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 32px 16px;
+                    }
+                    .ssbk-card {
+                        background: #fff;
+                        max-width: 760px;
+                        width: 100%;
+                        border-radius: 16px;
+                        box-shadow: 0 30px 80px rgba(7,27,51,.25);
+                        padding: 28px 32px 32px;
+                        position: relative;
+                    }
+                    .ssbk-brand {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        margin-bottom: 16px;
+                    }
+                    .ssbk-brand-mark {
+                        width: 38px; height: 38px;
+                        border-radius: 10px;
+                        background: linear-gradient(135deg,#12b8a6,#0e9c8c);
+                        color: #fff; font-weight: 800;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 14px; letter-spacing: 0.5px;
+                    }
+                    .ssbk-brand-name {
+                        font-weight: 800; color: #071b33; line-height: 1.1;
+                    }
+                    .ssbk-brand-tag {
+                        font-size: .78rem; color: #12b8a6; font-weight: 600;
+                    }
+                    .ssbk-title {
+                        font-size: 1.65rem;
+                        font-weight: 800;
+                        color: #071b33;
+                        margin: 0 0 .35rem;
+                    }
+                    .ssbk-subtitle {
+                        color: #5b6b80;
+                        margin: 0 0 1.2rem;
+                    }
+                    .ssbk-banner {
+                        background: #ecfdf5;
+                        border: 1px solid #a7f3d0;
+                        color: #065f46;
+                        border-radius: 10px;
+                        padding: 10px 14px;
+                        font-size: .9rem;
+                        margin-bottom: 18px;
+                    }
+                    .ssbk-form { display: flex; flex-direction: column; }
+                    .ssbk-label {
+                        display: block;
+                        font-size: .82rem;
+                        font-weight: 700;
+                        color: #071b33;
+                        margin: 16px 0 6px;
+                    }
+                    .ssbk-input, .ssbk-select, textarea.ssbk-input {
+                        border: 1px solid #d6dde7;
+                        border-radius: 8px;
+                        padding: 10px 12px;
+                        font-size: 1rem;
+                        background: #fff;
+                        color: #071b33;
+                        width: 100%;
+                        transition: border-color .15s ease, box-shadow .15s ease;
+                    }
+                    .ssbk-input:focus, .ssbk-select:focus, textarea.ssbk-input:focus {
+                        outline: none;
+                        border-color: #12b8a6;
+                        box-shadow: 0 0 0 3px rgba(18,184,166,.18);
+                    }
+                    .ssbk-row {
+                        display: flex; gap: 14px;
+                    }
+                    .ssbk-col { flex: 1 1 0; min-width: 0; }
+                    .ssbk-meeting-types {
+                        display: flex; gap: 12px; margin-bottom: 4px;
+                    }
+                    .ssbk-mtype { flex: 1; cursor: pointer; }
+                    .ssbk-mtype input { position: absolute; opacity: 0; pointer-events: none; }
+                    .ssbk-mtype-card {
+                        display: block;
+                        border: 1.5px solid #d6dde7;
+                        border-radius: 10px;
+                        padding: 12px 14px;
+                        transition: all .15s ease;
+                    }
+                    .ssbk-mtype input:checked + .ssbk-mtype-card {
+                        border-color: #12b8a6;
+                        background: #f0fdfa;
+                        box-shadow: 0 0 0 3px rgba(18,184,166,.15);
+                    }
+                    .ssbk-mtype-title { display: block; font-weight: 700; color: #071b33; }
+                    .ssbk-mtype-sub { display: block; font-size: .82rem; color: #5b6b80; margin-top: 2px; }
+                    .ssbk-tz-row {
+                        display: flex; gap: 8px; align-items: center;
+                    }
+                    .ssbk-select { flex: 1; }
+                    .ssbk-tz-btn {
+                        border: 1px solid #d6dde7; background: #fff;
+                        color: #071b33; padding: 10px 12px;
+                        border-radius: 8px; font-size: .85rem;
+                        cursor: pointer; white-space: nowrap;
+                    }
+                    .ssbk-tz-btn:hover { border-color: #12b8a6; color: #0e9c8c; }
+                    .ssbk-tz-hint {
+                        font-size: .8rem; color: #5b6b80; min-height: 1.2em; margin-top: 4px;
+                    }
+                    .ssbk-mini-note {
+                        font-size: .78rem; color: #5b6b80; margin: 6px 0 0;
+                    }
+                    .ssbk-slots {
+                        border: 1px solid #e8edf4;
+                        border-radius: 12px;
+                        background: #f8fafc;
+                        padding: 12px;
+                    }
+                    .ssbk-day {
+                        display: flex; align-items: flex-start;
+                        padding: 8px 4px; gap: 12px;
+                        border-bottom: 1px dashed #e8edf4;
+                    }
+                    .ssbk-day:last-child { border-bottom: none; }
+                    .ssbk-day-label {
+                        width: 44px; font-weight: 700; color: #071b33; padding-top: 6px;
+                    }
+                    .ssbk-day-slots {
+                        display: flex; flex-wrap: wrap; gap: 8px;
+                        flex: 1;
+                    }
+                    .ssbk-slot {
+                        border: 1.5px solid #d6dde7;
+                        background: #fff;
+                        color: #071b33;
+                        padding: 8px 12px;
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: .92rem;
+                        cursor: pointer;
+                        display: flex; flex-direction: column; align-items: center;
+                        line-height: 1.2;
+                        transition: all .12s ease;
+                        min-width: 110px;
+                    }
+                    .ssbk-slot:hover { border-color: #12b8a6; }
+                    .ssbk-slot.is-selected {
+                        background: #12b8a6;
+                        color: #fff;
+                        border-color: #12b8a6;
+                    }
+                    .ssbk-slot.is-selected .ssbk-slot-png { color: rgba(255,255,255,.85); }
+                    .ssbk-slot-local { font-weight: 700; }
+                    .ssbk-slot-png {
+                        font-size: .72rem;
+                        color: #5b6b80;
+                        margin-top: 2px;
+                    }
+                    .ssbk-slot.is-past {
+                        opacity: .35; cursor: not-allowed;
+                        text-decoration: line-through;
+                    }
+                    .ssbk-error {
+                        color: #b91c1c; font-size: .85rem; margin: 6px 0 0;
+                        min-height: 1em;
+                    }
+                    .ssbk-submit {
+                        margin-top: 22px;
+                        background: #12b8a6;
+                        color: #fff;
+                        border: none;
+                        padding: 14px 20px;
+                        border-radius: 10px;
+                        font-weight: 700;
+                        font-size: 1rem;
+                        cursor: pointer;
+                        transition: background .15s ease;
+                    }
+                    .ssbk-submit:hover { background: #0e9c8c; }
+                    .ssbk-submit:disabled {
+                        background: #94a3b8;
+                        cursor: not-allowed;
+                    }
+                    .ssbk-footer {
+                        font-size: .78rem;
+                        color: #94a3b8;
+                        text-align: center;
+                        margin: 18px 0 0;
+                    }
+                    @media (max-width: 600px) {
+                        .ssbk-card { padding: 22px 18px; }
+                        .ssbk-row { flex-direction: column; }
+                        .ssbk-meeting-types { flex-direction: column; }
+                        .ssbk-day { flex-direction: column; }
+                    }
+                </style>
+
+                <!-- ========================================================
+                     Timezone conversion + slot picker JS.
+                     CDATA so the XML parser doesn't trip on '&' / '<' / '>'.
+                     ======================================================== -->
+                <script type="text/javascript">
+                /*<![CDATA[*/
+                (function () {
+                    'use strict';
+
+                    var PNG_OFFSET_MIN = 10 * 60; // PNG is UTC+10, no DST.
+                    var ALLOWED_TZ = [
+                        'Pacific/Port_Moresby',
+                        'Asia/Singapore',
+                        'Asia/Ho_Chi_Minh',
+                        'Australia/Sydney'
+                    ];
+
+                    function getTzOffsetMinutes(tz, referenceDate) {
+                        try {
+                            var dtf = new Intl.DateTimeFormat('en-US', {
+                                timeZone: tz,
+                                year: 'numeric', month: '2-digit',
+                                day: '2-digit', hour: '2-digit', minute: '2-digit',
+                                second: '2-digit', hour12: false
+                            });
+                            var parts = dtf.formatToParts(referenceDate);
+                            var obj = {};
+                            parts.forEach(function (p) { obj[p.type] = p.value; });
+                            var asUtc = Date.UTC(
+                                parseInt(obj.year, 10),
+                                parseInt(obj.month, 10) - 1,
+                                parseInt(obj.day, 10),
+                                obj.hour === '24' ? 0 : parseInt(obj.hour, 10),
+                                parseInt(obj.minute, 10),
+                                parseInt(obj.second, 10)
+                            );
+                            // If the tz difference is exactly a whole number of
+                            // hours, the result is reliable. We're using this
+                            // for shift-by-hour offsets only.
+                            return Math.round((asUtc - referenceDate.getTime()) / 60000);
+                        } catch (err) {
+                            return 0;
+                        }
+                    }
+
+                    function pngWeekdayAt(dateInTz, tzOffsetMin) {
+                        // Compute weekday (0=Mon..6=Sun) of "PNG local" date when
+                        // viewed from timezone tzOffsetMin.
+                        // PNG local at given UTC date is UTC + 10h.
+                        var pngMs = dateInTz.getTime() + PNG_OFFSET_MIN * 60000;
+                        var pngDate = new Date(pngMs);
+                        var jsDay = pngDate.getUTCDay(); // 0=Sun..6=Sat
+                        return (jsDay + 6) % 7; // 0=Mon..6=Sun
+                    }
+
+                    document.addEventListener('DOMContentLoaded', function () {
+                        var tzSelect = document.getElementById('ssbk-timezone');
+                        var detectBtn = document.getElementById('ssbk-detect-tz');
+                        var detectHint = document.getElementById('ssbk-tz-detected');
+                        var slotButtons = document.querySelectorAll('.ssbk-slot');
+                        var slotInput = document.getElementById('ssbk-slot-input');
+                        var slotError = document.getElementById('ssbk-slot-error');
+                        var submitBtn = document.getElementById('ssbk-submit');
+                        var form = document.getElementById('ssbk-form');
+
+                        function detectTimezone() {
+                            try {
+                                var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                                if (!tz) { return null; }
+                                if (ALLOWED_TZ.indexOf(tz) !== -1) { return tz; }
+                                // Try to map common zones to closest supported.
+                                var map = {
+                                    'Pacific/Guam': 'Pacific/Port_Moresby',
+                                    'Asia/Bangkok': 'Asia/Ho_Chi_Minh',
+                                    'Asia/Jakarta': 'Asia/Singapore',
+                                    'Australia/Melbourne': 'Australia/Sydney',
+                                    'Australia/Brisbane': 'Australia/Sydney',
+                                };
+                                return map[tz] || null;
+                            } catch (e) {
+                                return null;
+                            }
+                        }
+
+                        function applyDetectedTz(initial) {
+                            var detected = detectTimezone();
+                            if (detected) {
+                                tzSelect.value = detected;
+                                if (!initial) {
+                                    detectHint.textContent = 'Detected timezone: ' + detected;
+                                }
+                            } else if (!initial) {
+                                detectHint.textContent = 'Could not auto-detect — please pick one above.';
+                            }
+                            refreshLabels();
+                        }
+
+                        function refreshLabels() {
+                            var tz = tzSelect.value;
+                            var offsetMin = getTzOffsetMinutes(tz, new Date());
+                            var now = new Date();
+                            // Compute the start of today in PNG.
+                            var pngTodayStartUtc = new Date(Date.UTC(
+                                now.getUTCFullYear(),
+                                now.getUTCMonth(),
+                                now.getUTCDate()
+                            ));
+                            // For each slot, render the local-time label.
+                            slotButtons.forEach(function (btn) {
+                                var weekday = parseInt(btn.dataset.weekday, 10);
+                                var hour = parseInt(btn.dataset.hour, 10);
+                                var minute = parseInt(btn.dataset.minute, 10);
+                                var pngMs = pngTodayStartUtc.getTime()
+                                    + weekday * 86400000
+                                    + hour * 3600000
+                                    + minute * 60000;
+                                var pngDate = new Date(pngMs);
+                                // Local-time equivalent: subtract PNG offset,
+                                // then add the visitor's tz offset.
+                                var visitorMs = pngMs - PNG_OFFSET_MIN * 60000 + offsetMin * 60000;
+                                var visitorDate = new Date(visitorMs);
+                                // Mark slot in the past for "today" only.
+                                var isToday = (
+                                    pngDate.getUTCDate() === now.getUTCDate() &&
+                                    pngDate.getUTCMonth() === now.getUTCMonth() &&
+                                    pngDate.getUTCFullYear() === now.getUTCFullYear()
+                                ) || (
+                                    new Date(pngMs).getTime() < now.getTime()
+                                );
+                                var localLabel =
+                                    ('0' + visitorDate.getUTCHours()).slice(-2) + ':' +
+                                    ('0' + visitorDate.getUTCMinutes()).slice(-2);
+                                var localEl = btn.querySelector('.ssbk-slot-local');
+                                if (localEl) { localEl.textContent = localLabel; }
+
+                                if (isToday && visitorDate.getTime() < now.getTime() - 60000) {
+                                    btn.classList.add('is-past');
+                                    btn.disabled = true;
+                                } else {
+                                    btn.classList.remove('is-past');
+                                    btn.disabled = false;
+                                }
+                            });
+                        }
+
+                        slotButtons.forEach(function (btn) {
+                            btn.addEventListener('click', function (ev) {
+                                ev.preventDefault();
+                                if (btn.disabled || btn.classList.contains('is-past')) {
+                                    return;
+                                }
+                                slotButtons.forEach(function (b) {
+                                    b.classList.remove('is-selected');
+                                });
+                                btn.classList.add('is-selected');
+                                slotInput.value = btn.dataset.slotKey;
+                                slotError.textContent = '';
+                            });
+                        });
+
+                        if (detectBtn) {
+                            detectBtn.addEventListener('click', function () {
+                                applyDetectedTz(false);
+                            });
+                        }
+                        if (tzSelect) {
+                            tzSelect.addEventListener('change', function () {
+                                detectHint.textContent = '';
+                                refreshLabels();
+                            });
+                        }
+
+                        // Initial render
+                        applyDetectedTz(true);
+
+                        // Client-side validation
+                        if (form) {
+                            form.addEventListener('submit', function (ev) {
+                                var ok = true;
+                                slotError.textContent = '';
+                                if (!slotInput.value) {
+                                    slotError.textContent = 'Please pick a slot.';
+                                    ok = false;
+                                }
+                                if (!ok) {
+                                    ev.preventDefault();
+                                    if (submitBtn) { submitBtn.disabled = false; }
+                                }
+                            });
+                        }
+                    });
+                })();
+                /*]]>*/
+                </script>
+
+            </t>
+        </template>
+
+        <!-- ============================================================
+             Thank-you page
+             ============================================================ -->
+        <template id="booking_thanks" name="Steamships — Booking Confirmed">
+            <t t-call="website.layout">
+                <t t-set="title">Booking confirmed — Steamships</t>
+
+                <div class="ssbk-wrap">
+                    <div class="ssbk-card ssbk-thanks-card">
+                        <div class="ssbk-thanks-icon">✓</div>
+                        <h1 class="ssbk-title">Your meeting is booked</h1>
+                        <p class="ssbk-subtitle">
+                            We've added the event to the Steamships calendar.
+                            See you soon!
+                        </p>
+
+                        <t t-if="event">
+                            <div class="ssbk-thanks-detail">
+                                <div class="ssbk-thanks-row">
+                                    <span class="ssbk-thanks-label">Topic</span>
+                                    <span class="ssbk-thanks-val"><t t-esc="event['name']"/></span>
+                                </div>
+                                <div class="ssbk-thanks-row">
+                                    <span class="ssbk-thanks-label">Your time (Steamships HQ)</span>
+                                    <span class="ssbk-thanks-val">
+                                        <t t-esc="event['start_png_label']"/>
+                                         – <t t-esc="event['stop_png_label']"/>
+                                        <span class="ssbk-thanks-tz">Pacific/Port_Moresby</span>
+                                    </span>
+                                </div>
+                                <div class="ssbk-thanks-row ssbk-thanks-row-soft">
+                                    <span class="ssbk-thanks-label">Stored (UTC)</span>
+                                    <span class="ssbk-thanks-val">
+                                        <t t-esc="event['start_utc_label']"/>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <a t-att-href="event['google_url']" target="_blank"
+                               class="ssbk-gcal">
+                                <span class="ssbk-gcal-icon"></span>
+                                Add to Google Calendar
+                            </a>
+
+                            <p class="ssbk-thanks-foot">
+                                You'll receive a calendar invite by email shortly.
+                                Need to reschedule? Just reply to the invite.
+                            </p>
+                        </t>
+                        <t t-else="">
+                            <p class="ssbk-banner">
+                                Booking session missing or expired. If this is unexpected,
+                                please contact the Steamships team.
+                            </p>
+                        </t>
+
+                        <div class="ssbk-thanks-actions">
+                            <a class="ssbk-link" href="/steamships/booking">Book another meeting →</a>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    body { background: #071b33; }
+                    .ssbk-thanks-card { text-align: center; max-width: 560px; }
+                    .ssbk-thanks-icon {
+                        width: 64px; height: 64px;
+                        border-radius: 50%;
+                        background: #d1fae5;
+                        color: #065f46;
+                        font-size: 32px;
+                        font-weight: 800;
+                        display: inline-flex;
+                        align-items: center; justify-content: center;
+                        margin: 4px auto 12px;
+                    }
+                    .ssbk-thanks-detail {
+                        text-align: left;
+                        background: #f8fafc;
+                        border: 1px solid #e8edf4;
+                        border-radius: 12px;
+                        padding: 14px 18px;
+                        margin: 16px 0 22px;
+                    }
+                    .ssbk-thanks-row {
+                        display: flex; justify-content: space-between; align-items: baseline;
+                        padding: 8px 0;
+                        border-bottom: 1px dashed #e8edf4;
+                        gap: 12px;
+                    }
+                    .ssbk-thanks-row:last-child { border-bottom: none; }
+                    .ssbk-thanks-row-soft { color: #5b6b80; }
+                    .ssbk-thanks-label {
+                        font-weight: 700; color: #071b33; font-size: .9rem;
+                        flex: 0 0 auto;
+                    }
+                    .ssbk-thanks-row-soft .ssbk-thanks-label {
+                        color: #5b6b80; font-weight: 600;
+                    }
+                    .ssbk-thanks-val { color: #071b33; font-weight: 600; text-align: right; }
+                    .ssbk-thanks-tz {
+                        display: inline-block;
+                        margin-left: 6px;
+                        font-size: .78rem;
+                        color: #5b6b80;
+                    }
+                    .ssbk-gcal {
+                        display: inline-flex; align-items: center; gap: 8px;
+                        background: #fff;
+                        border: 1.5px solid #d6dde7;
+                        color: #071b33;
+                        border-radius: 10px;
+                        padding: 12px 18px;
+                        font-weight: 700; text-decoration: none;
+                        transition: all .15s ease;
+                    }
+                    .ssbk-gcal:hover {
+                        border-color: #12b8a6;
+                        color: #0e9c8c;
+                        box-shadow: 0 4px 14px rgba(18,184,166,.18);
+                    }
+                    .ssbk-gcal-icon {
+                        width: 18px; height: 18px; display: inline-block;
+                        background: linear-gradient(135deg,#12b8a6,#0e9c8c);
+                        border-radius: 4px;
+                    }
+                    .ssbk-thanks-foot {
+                        font-size: .82rem; color: #5b6b80;
+                        margin: 18px 0 4px;
+                    }
+                    .ssbk-thanks-actions { margin-top: 14px; }
+                    .ssbk-link {
+                        color: #12b8a6; text-decoration: none;
+                        font-weight: 700;
+                    }
+                    .ssbk-link:hover { color: #0e9c8c; }
+                </style>
+
+            </t>
+        </template>
+
+    </data>
+</odoo>

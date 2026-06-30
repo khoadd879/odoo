@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Internal "Smart Booking" dashboard.
+
+             Menu path:
+                 Steamships (root)
+                     └── Smart Booking
+
+             We define a simple Server Action + window action that opens
+             the Calendar events with a domain filter for events created
+             by Smart Booking (description starts with the
+             "Booked via Steamships Smart Booking." marker line).
+             ============================================================ -->
+
+        <!-- Window action: filtered Calendar meeting list. -->
+        <record id="action_smart_booking_calendar" model="ir.actions.act_window">
+            <field name="name">Smart Booking — Meetings</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">list,form,calendar</field>
+            <field name="domain">[("name", "ilike", "Sales Call"),"|",("name", "ilike", "Client Onboarding")]</field>
+            <field name="context">{"search_default_upcoming": 1}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No bookings yet.
+                </p>
+                <p>
+                    Public meetings booked through
+                    <code>/steamships/booking</code> appear here.
+                    Open a CRM lead and use the <b>Booking Link</b> button
+                    to share the public URL with a customer.
+                </p>
+            </field>
+        </record>
+
+        <!-- Optional embedded dashboard panel listing the last 20 events.
+             Kept in QWeb so the demo can show a marketing-friendly
+             summary without leaving the menu. -->
+        <record id="action_smart_booking_dashboard" model="ir.actions.act_window">
+            <field name="name">Smart Booking Dashboard</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">list,form,calendar</field>
+            <field name="domain">[("name", "ilike", "Sales Call"),"|",("name", "ilike", "Client Onboarding")]</field>
+            <field name="context">{"search_default_upcoming": 1, "default_view": "list"}</field>
+        </record>
+
+        <!-- Top-level Steamships root menu (only creates it if missing). -->
+        <menuitem id="menu_steamships_root"
+                  name="Steamships"
+                  sequence="60"
+                  web_icon="steamships_booking,static/description/icon.png"
+                  groups="base.group_user"/>
+
+        <!-- Smart Booking sub-menu (under Steamships). -->
+        <menuitem id="menu_smart_booking_main"
+                  name="Smart Booking"
+                  parent="menu_steamships_root"
+                  sequence="10"
+                  action="action_smart_booking_dashboard"
+                  groups="base.group_user"/>
+
+        <menuitem id="menu_smart_booking_meetings"
+                  name="All Booked Meetings"
+                  parent="menu_smart_booking_main"
+                  sequence="10"
+                  action="action_smart_booking_calendar"
+                  groups="base.group_user"/>
+
+    </data>
+</odoo>
