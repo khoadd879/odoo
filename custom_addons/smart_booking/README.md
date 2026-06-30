@@ -1,4 +1,4 @@
-# Steamships Smart Booking
+# Smart Booking
 
 Lightweight public booking module for the Steamships Odoo 19 Community prototype.
 

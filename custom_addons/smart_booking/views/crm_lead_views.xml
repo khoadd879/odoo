@@ -3,10 +3,10 @@
     <data>
 
         <!-- ============================================================
-             Add "Booking Link" button on crm.lead form view.
+             Add "Booking Link", "Booked Meetings" and "Booking Page" on
+             the crm.lead form view.
+
              Inherits the standard CRM lead form (crm.crm_lead_view_form).
-             Uses a header button with a JS prompt fallback since the
-             public URL is generated from the current lead id and base URL.
              ============================================================ -->
         <record id="view_crm_lead_form_booking_link" model="ir.ui.view">
             <field name="name">crm.lead.form.steamships.booking</field>
@@ -14,8 +14,9 @@
             <field name="inherit_id" ref="crm.crm_lead_view_form"/>
             <field name="priority">99</field>
             <field name="arch" type="xml">
-                <!-- Inject after the standard header_actions / button_box
-                     by placing a "Booking Link" button into the header. -->
+                <!-- ============================================================
+                     Header button: open the public booking page in a new tab.
+                     ============================================================ -->
                 <xpath expr="//header" position="inside">
                     <button name="action_copy_booking_link"
                             type="object"
@@ -24,8 +25,14 @@
                             title="Open the public Steamships booking page for this lead."/>
                 </xpath>
 
-                <!-- Add a copy-to-clipboard helper inside the button_box so the
-                     URL is visible right under the status bar. -->
+                <!-- ============================================================
+                     button_box (smart-button area). We add three Odoo
+                     standard ``oe_stat_button`` entries:
+
+                     * Booking Page  →  open public URL in a new tab
+                     * Booked Meetings →  list of calendar.event records
+                                          tied to this lead
+                     ============================================================ -->
                 <xpath expr="//div[@name='button_box']" position="inside">
                     <button name="action_copy_booking_link"
                             type="object"
@@ -33,6 +40,15 @@
                             icon="fa-calendar-plus-o"
                             string="Booking Page"
                             title="Copy or open the public booking URL."/>
+
+                    <button name="action_open_booked_meetings"
+                            type="object"
+                            class="oe_stat_button"
+                            icon="fa-calendar">
+                        <field name="x_steamships_booking_event_count"
+                               widget="statinfo"
+                               string="Booked Meetings"/>
+                    </button>
                 </xpath>
             </field>
         </record>

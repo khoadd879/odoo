@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================
+             Smart Booking actions.
+
+             Target model: native ``calendar.event``. We use a domain
+             filter on the Steamships bookkeeping flag rather than a
+             name-substring grep so manual unrelated events never appear.
+
+             * ``action_smart_booking_calendar``  — Calendar + List + Form
+                                                     (default view = calendar).
+             * ``action_smart_booking_list``      — List + Calendar + Form
+                                                     (default view = list).
+             * ``action_smart_booking_lead_calendar`` — calendar.event
+                                                     filtered by lead, used
+                                                     by the Booked Meetings
+                                                     smart button on crm.lead.
+             ============================================================ -->
+
+        <record id="action_smart_booking_calendar"
+                model="ir.actions.act_window">
+            <field name="name">Smart Booking Calendar</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">calendar,list,form</field>
+            <field name="domain">[('x_steamships_booking', '=', True)]</field>
+            <field name="context">{'default_x_steamships_booking': True, 'search_default_upcoming': 1}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No bookings yet.
+                </p>
+                <p>
+                    Public meetings booked through
+                    <code>/steamships/booking</code> appear here in both
+                    calendar and list view. Open a CRM lead and use the
+                    <b>Booking Link</b> button to share the public URL
+                    with a customer.
+                </p>
+            </field>
+        </record>
+
+        <record id="action_smart_booking_list"
+                model="ir.actions.act_window">
+            <field name="name">Smart Booking List</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">list,calendar,form</field>
+            <field name="domain">[('x_steamships_booking', '=', True)]</field>
+            <field name="context">{'default_x_steamships_booking': True, 'search_default_upcoming': 1}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No bookings yet.
+                </p>
+                <p>
+                    Every booking created from <code>/steamships/booking</code>
+                    shows up here. Switch to <b>Smart Booking Calendar</b>
+                    for a month / week view.
+                </p>
+            </field>
+        </record>
+
+        <!-- ============================================================
+             Calendar sub-menu — same domain, exposed from the native
+             Calendar app so the bookings show up next to the user's
+             own meetings without leaving Calendar.
+             ============================================================ -->
+        <record id="action_smart_booking_calendar_meetings"
+                model="ir.actions.act_window">
+            <field name="name">Smart Booking Meetings</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">calendar,list,form</field>
+            <field name="domain">[('x_steamships_booking', '=', True)]</field>
+            <field name="context">{'default_x_steamships_booking': True, 'search_default_upcoming': 1}</field>
+        </record>
+
+        <!-- Action used by the "Booked Meetings" smart button on crm.lead.
+             Domain is rewritten at runtime to scope to the active lead. -->
+        <record id="action_smart_booking_lead_calendar"
+                model="ir.actions.act_window">
+            <field name="name">Booked Meetings</field>
+            <field name="res_model">calendar.event</field>
+            <field name="view_mode">calendar,list,form</field>
+            <field name="domain">[('x_steamships_booking', '=', True), ('x_steamships_lead_id', '=', 0)]</field>
+            <field name="context">{'default_x_steamships_booking': True, 'default_x_steamships_lead_id': active_id}</field>
+        </record>
+
+        <!-- ============================================================
+             Steamships / Smart Booking menus.
+
+             Expected menu structure:
+
+                 Steamships
+                   └── Smart Booking
+                         ├── Smart Booking Calendar
+                         └── Smart Booking List
+             ============================================================ -->
+
+        <!-- Top-level Steamships root menu (only creates it if missing).
+             The `web_icon` references the static/description/icon.png
+             shipped with this module. -->
+        <menuitem id="menu_steamships_root"
+                  name="Steamships"
+                  sequence="60"
+                  web_icon="smart_booking,static/description/icon.png"
+                  groups="base.group_user"/>
+
+        <menuitem id="menu_smart_booking_main"
+                  name="Smart Booking"
+                  parent="menu_steamships_root"
+                  sequence="10"
+                  groups="base.group_user"/>
+
+        <menuitem id="menu_smart_booking_calendar"
+                  name="Smart Booking Calendar"
+                  parent="menu_smart_booking_main"
+                  sequence="10"
+                  action="action_smart_booking_calendar"
+                  groups="base.group_user"/>
+
+        <menuitem id="menu_smart_booking_list"
+                  name="Smart Booking List"
+                  parent="menu_smart_booking_main"
+                  sequence="20"
+                  action="action_smart_booking_list"
+                  groups="base.group_user"/>
+
+        <!-- Native Calendar app entry.
+             ``calendar.mail_menu_calendar`` is the standard Calendar root
+             menu shipped by the ``calendar`` module; we mount our menu as
+             a child so "Calendar → Smart Booking Meetings" works. If the
+             xpath / ref ever changes the menu is simply skipped because
+             calendar is already a hard depends. -->
+        <menuitem id="menu_smart_booking_calendar_meetings"
+                  name="Smart Booking Meetings"
+                  parent="calendar.mail_menu_calendar"
+                  sequence="50"
+                  action="action_smart_booking_calendar_meetings"
+                  groups="base.group_user"/>
+
+    </data>
+</odoo>

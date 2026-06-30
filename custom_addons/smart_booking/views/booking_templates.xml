@@ -41,6 +41,10 @@
                         <form id="ssbk-form" class="ssbk-form" t-attf-action="/steamships/booking/submit" method="post">
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                             <input type="hidden" name="lead_id" t-att-value="prefilled.get('lead_id', '')"/>
+                            <!-- Per-page random token; server uses it as the
+                                 idempotency key so F5 / double-submit / retry
+                                 do not create a duplicate calendar.event. -->
+                            <input type="hidden" name="booking_token" t-att-value="booking_token"/>
 
                             <!-- Meeting type -->
                             <label class="ssbk-label">Meeting type</label>

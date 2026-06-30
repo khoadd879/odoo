@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "Steamships Smart Booking",
-    "version": "19.0.1.0.0",
+    "name": "Smart Booking",
+    "version": "19.0.2.0.0",
     "summary": "Lightweight public booking flow that creates calendar.events and posts on the CRM lead chatter.",
     "description": """
 Steamships Smart Booking
@@ -19,8 +19,12 @@ Demo-ready booking flow on Odoo 19 Community.
   public URL.
 * Adds a "Steamships -> Smart Booking" menu linking to a filtered
   list of booking events.
+* *Optional* Google Calendar push: if the assigned salesperson/admin
+  has connected their personal Google Calendar via OAuth 2.0, the same
+  meeting is mirrored to their Google Calendar automatically.
 
-No Enterprise / Studio / OAuth.
+No Enterprise / Studio required for the integration. Tokens are stored
+as plain ``Char`` for the prototype — encrypt before production.
 """,
     "author": "Steamships Prototype Team",
     "website": "https://steamships.com.pg",
@@ -36,9 +40,18 @@ No Enterprise / Studio / OAuth.
     ],
     "data": [
         "security/ir.model.access.csv",
-        "views/booking_templates.xml",
+        # The CRM lead view must be loaded before our smart button targets it,
+        # and the actions / menus reference both, so we keep them in a single
+        # data file to avoid cross-file ordering issues.
         "views/crm_lead_views.xml",
+        "views/smart_booking_actions.xml",
         "views/booking_menu.xml",
+        "views/booking_templates.xml",
+        # Google Calendar integration (optional OAuth push). The
+        # settings view references ``menu_smart_booking_main``, so it
+        # must be loaded after ``smart_booking_actions.xml``.
+        "views/google_calendar_settings.xml",
+        "views/google_calendar_views.xml",
     ],
     "installable": True,
     "application": True,
