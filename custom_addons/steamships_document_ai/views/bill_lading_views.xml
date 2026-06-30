@@ -81,7 +81,11 @@
                             <field name="freight_terms"/>
                             <field name="delivery_agent"/>
                         </group>
-                        <field name="cargo_description" placeholder="Description of cargo"/>
+                    </group>
+
+                    <group string="Cargo Details" name="cargo_details" colspan="4">
+                        <field name="cargo_description" widget="text" colspan="4"
+                               placeholder="Description of cargo"/>
                         <field name="reference_invoice_number"
                                placeholder="e.g. INV-2025-0042 (if the B/L references an invoice)"/>
                     </group>

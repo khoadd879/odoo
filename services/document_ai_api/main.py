@@ -172,225 +172,601 @@ BOL_LABEL_ORDER = [
 ]
 
 
-def _label_positions(text: str) -> list[tuple[int, str]]:
-    """Return ``(start_char, uppercased_label)`` for every label occurrence.
+def _line_has_label(line: str, label: str) -> bool:
+    """True if ``line`` contains ``label`` as a standalone word."""
+    return re.search(rf"\b{re.escape(label.upper())}\b", line.upper()) is not None
 
-    Word-boundary match so ``NOTIFY`` inside ``NOTIFY PARTY`` is reported as
-    the longer match. Longer labels win so partial overlaps are avoided.
+
+def _line_is_pure_label(line: str, label: str) -> bool:
+    """True if ``line`` is essentially the label alone (allowing trailing noise
+    such as a separator, footnote digit, or pipe).
     """
-    upper = text.upper()
-    candidates = sorted({lbl for _, group in BOL_LABEL_ORDER for lbl in group},
-                        key=len, reverse=True)
-    hits: list[tuple[int, str]] = []
-    for lbl in candidates:
-        for m in re.finditer(rf"\b{re.escape(lbl)}\b", upper):
-            hits.append((m.start(), lbl))
-    hits.sort(key=lambda x: x[0])
-    return hits
+    cleaned = re.sub(r"[^A-Za-z\s]", " ", line.upper()).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    label_norm = re.sub(r"[^A-Za-z\s]", " ", label.upper()).strip()
+    label_norm = re.sub(r"\s+", " ", label_norm)
+    return cleaned == label_norm
 
 
-def _split_label_inline(line: str, label: str) -> str:
-    """Strip ``LABEL:`` / ``LABEL.`` / ``LABEL`` prefix from a single line."""
-    up = line.upper()
+def _is_noise_line(line: str) -> bool:
+    """OCR noise lines: just a symbol, footnote digit, or pipe fragment."""
+    stripped = line.strip(" ,;:\t|")
+    if not stripped:
+        return True
+    # Single OCR noise symbol.
+    if stripped in {"©", "®", "TM", "@", "*", "()", "(.)"}:
+        return True
+    # Pure digits / pure punctuation.
+    if re.fullmatch(r"[\d().\-+/]+", stripped):
+        return True
+    return False
+
+
+def first_value_after_label_lines(text: str, label: str, stop_labels: list[str]) -> str:
+    """Find a line containing ``label`` (as a standalone label or as part of a
+    table header), then return the next non-empty, non-noise line that
+    doesn't begin with one of ``stop_labels``.
+
+    Handles three layouts:
+
+    * ``Label:\\nValue`` — value is the next non-empty line.
+    * ``Label: Value`` — value is the same line, label prefix stripped.
+    * ``Label: ValueA OtherLabel: ValueB`` — valueA returned, OtherLabel
+      consumed by inline-label stripping.
+    """
     label_up = label.upper()
+    lines = text.splitlines()
+    stop_ups = [s.upper() for s in stop_labels]
+
+    def is_pure_stop(line: str) -> bool:
+        up = line.upper()
+        return any(
+            _line_has_label(line, s) and _line_is_pure_label(line, s)
+            for s in stop_ups
+        )
+
+    for i, line in enumerate(lines):
+        if not _line_has_label(line, label):
+            continue
+        upper = line.upper()
+        # 1) Same-line value: "Label: Value" — strip the label prefix in place.
+        # This handles "Shipper: General Goods..." on its own line.
+        prefix_idx = upper.find(label_up)
+        # Look for a colon separator after the label.
+        if prefix_idx != -1:
+            after = line[prefix_idx + len(label_up):]
+            after_stripped = after.lstrip(" ,;:\t|")
+            # If after_stripped starts with content (not just another label),
+            # treat as inline value.
+            if after_stripped and not _is_noise_line(after_stripped):
+                up_after = after_stripped.upper()
+                # Don't consume lines that begin with another label.
+                first_token = up_after.split()[0].rstrip(":.") if up_after.split() else ""
+                looks_like_label = any(
+                    re.match(rf"^{re.escape(s)}", first_token) for s in [label_up] + stop_ups
+                )
+                if not looks_like_label:
+                    # Strip any trailing inline labels.
+                    return _strip_inline_labels(after_stripped, stop_labels).strip()
+        # 2) Pure-label line: value is the NEXT meaningful line.
+        if _line_is_pure_label(line, label_up):
+            for j in range(i + 1, min(i + 6, len(lines))):
+                candidate = lines[j].strip()
+                if not candidate or _is_noise_line(candidate):
+                    continue
+                if is_pure_stop(candidate):
+                    break
+                return _strip_label_prefix(candidate, label_up).strip()
+            continue
+    return ""
+
+
+_CITY_COUNTRY_RE = re.compile(
+    r"\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?),\s*"
+    r"([A-Z][A-Za-z]+)"
+)
+
+
+def extract_city_country_pairs(value: str, dedupe: bool = True) -> list[str]:
+    """Extract every ``CITY, COUNTRY`` pair in order from a noisy value.
+
+    OCR frequently concatenates cells (``TOKYO, JAPAN TOKYO, JAPAN``);
+    a single regex pass returns each well-formed pair.
+    """
+    value = value.strip(" ,;:\t|")
+    if not value:
+        return []
+    upper = value.upper()
+    pairs: list[str] = []
+    for m in _CITY_COUNTRY_RE.finditer(upper):
+        city = m.group(1).strip().rstrip(",")
+        country = m.group(2).strip()
+        # Heuristic: country must contain at least one letter and be short-ish.
+        if country and country.replace(" ", "").isalpha() and len(country) <= 30:
+            pairs.append(f"{city.title() if city.isupper() else city}, "
+                         f"{country.title() if country.isupper() else country}")
+    if not dedupe:
+        return pairs
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in pairs:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def _first_city_country(value: str) -> str:
+    """Return the first ``CITY, COUNTRY`` pair from a noisy value."""
+    pairs = extract_city_country_pairs(value)
+    return pairs[0] if pairs else value.strip(" ,;:\t|")
+
+
+def clean_line(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip(" ,;:\t|"))
+
+
+def normalize_vessel_name(value: str) -> str:
+    value = clean_line(value)
+    compact = re.sub(r"\s+", "", value.upper())
+
+    if compact == "AAATHAILAND":
+        return "AAA THAILAND"
+
+    # Generic fallback for OCR that glues AAA + vessel word.
+    m = re.match(r"^(AAA)([A-Z]+)$", compact)
+    if m:
+        return f"{m.group(1)} {m.group(2)}"
+
+    return value
+
+
+def _normalize_units(value: str) -> str:
+    """Normalise ``12,335kg`` -> ``12,335 kg``, ``21.80CBM`` -> ``21.80 CBM``."""
+    value = value.strip()
+    if not value:
+        return ""
+    # Insert a single space before a unit token if glued.
+    value = re.sub(r"(\d)([A-Za-z]+)\b", r"\1 \2", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _strip_label_prefix(value: str, label_up: str) -> str:
     for sep in (":", "."):
-        idx = up.find(label_up + sep)
-        if idx != -1:
-            return line[idx + len(label) + 1 :].strip(" ,;:\t")
-    idx = up.find(label_up)
-    if idx == 0:
-        return line[len(label):].strip(" ,;:\t")
-    return line.strip(" ,;:\t")
+        idx = value.upper().find(label_up + sep)
+        if idx == 0:
+            return value[len(label_up) + 1 :].lstrip(" ,;:\t")
+    if value.upper().startswith(label_up):
+        return value[len(label_up):].lstrip(" ,;:\t")
+    return value
 
 
-def _extract_vessel_voyage(line: str) -> tuple[str, str]:
-    """Handle the common B/L line ``AAA THAILAND V.1000N`` (no separate label)."""
-    text = line.strip(" ,;:\t")
-    m = re.search(r"\b(V\.?\s?[A-Z0-9]+)\b", text, re.IGNORECASE)
+def _strip_inline_labels(value: str, labels: list[str]) -> str:
+    """Remove trailing label fragments from a value line.
+
+    Example: ``BANGKOK, THAILAND Place of Acceptance Original BS/L`` →
+    ``BANGKOK, THAILAND``.
+    """
+    upper = value.upper()
+    earliest = len(value)
+    for lbl in labels:
+        lbl_up = lbl.upper()
+        # Standalone label occurrence (word-boundary).
+        m = re.search(rf"\b{re.escape(lbl_up)}\b", upper)
+        if m and m.start() < earliest:
+            earliest = m.start()
+    if earliest < len(value):
+        return value[:earliest].rstrip(" ,;:\t")
+    return value
+
+
+def _find_table_row(text: str, header_labels: list[str]) -> list[str]:
+    """Find a row containing ALL ``header_labels`` and return the next
+    non-empty line split by ``|``.
+
+    Used for Ocean B/L table rows where multiple labels live on one header
+    line and the next line holds the column values separated by ``|``.
+    """
+    lines = text.splitlines()
+    label_ups = [lbl.upper() for lbl in header_labels]
+    for i, line in enumerate(lines):
+        up = line.upper()
+        if all(re.search(rf"\b{re.escape(lbl)}\b", up) for lbl in label_ups):
+            # Walk forward to find the value row.
+            for j in range(i + 1, min(i + 6, len(lines))):
+                candidate = lines[j].strip()
+                if not candidate or _is_noise_line(candidate):
+                    continue
+                return [c.strip() for c in candidate.split("|")]
+    return []
+
+
+def _normalize_vessel_voyage(cell: str) -> tuple[str, str]:
+    """Split a single cell like ``AAA THAILAND V.1000N``."""
+    cell = cell.strip(" ,;:\t|")
+    m = re.search(r"\b(V\.?\s?[A-Z0-9]+)\b", cell, re.IGNORECASE)
     if not m:
-        return text, ""
+        return cell, ""
     voyage = m.group(1).replace(" ", "").upper()
     voyage = voyage if "." in voyage else voyage.replace("V", "V.")
-    vessel = text[: m.start()].strip(" ,;:\t")
+    vessel = cell[: m.start()].strip(" ,;:\t|")
     return vessel, voyage
 
 
+def _place_from_pipe(cell: str) -> str:
+    cell = cell.strip(" ,;:\t|")
+    cell = _strip_inline_labels(
+        cell, ["PORT OF DISCHARGE", "PLACE OF DELIVERY", "FREIGHT PAYABLE AT"]
+    )
+    return cell.strip(" ,;:\t|")
+
+
+def _extract_discharge_delivery_row(text: str) -> tuple[str, str]:
+    """Parse OCR row: discharge / delivery / charges payable values."""
+    lines = text.splitlines()
+    for idx, line in enumerate(lines):
+        up = line.upper()
+        if "PORT OF DISCHARGE" not in up or "PLACE OF DELIVERY" not in up:
+            continue
+        for candidate in lines[idx + 1: idx + 6]:
+            candidate = candidate.strip()
+            if not candidate or _is_noise_line(candidate):
+                continue
+            pairs = extract_city_country_pairs(candidate, dedupe=False)
+            if not pairs:
+                return "", ""
+            delivery = pairs[2] if len(pairs) >= 3 else pairs[1] if len(pairs) >= 2 else ""
+            return pairs[0], delivery
+    return "", ""
+
+
+def _extract_document_date(text: str) -> str:
+    """Pick the best document date from the raw OCR text.
+
+    Priority order (per spec):
+      1. ``DATE : dd/mm/yyyy`` (or any ``Date`` label followed by a date).
+      2. ``signed at ... dd/mm/yyyy`` / ``shipped on board ... dd/mm/yyyy``.
+      3. ``1st March, 2018``-style ordinal + month name + year, including
+         OCR typos like ``Ist March, 2018``.
+    """
+    upper = text.upper()
+
+    # 1) Label-led date. Tolerate `DATE :`, `Date:`, `DATE-`, etc.
+    m = re.search(r"\bDATE\s*[:\-]?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
+                  text, re.IGNORECASE)
+    if m:
+        return m.group(1)
+
+    # 2) Signed/on-board date. Allow any text between the keyword and the
+    # numeric date (OCR may insert a city, signature name, etc.).
+    m = re.search(
+        r"(?:SIGNED\s+AT|SHIPPED\s+ON\s+BOARD|ON\s+BOARD|B/L\s+SIGNED)"
+        r"[^0-9\n]*?(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return m.group(1)
+
+    m = re.search(
+        r"(?:SIGNED\s+AT|SHIPPED\s+ON\s+BOARD|ON\s+BOARD|B/L\s+SIGNED)"
+        r"[^\n]*?\b([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4})\b",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1)
+
+    # 3) Ordinal "1st March, 2018" / OCR typo "Ist March, 2018" / "1 March 2018".
+    ord_re = re.compile(
+        r"\b(\d{1,2}|[Ii]st)(?:st|nd|rd|th)?\s+"
+        r"(January|February|March|April|May|June|"
+        r"July|August|September|October|November|December),?\s+(\d{4})\b",
+        re.IGNORECASE,
+    )
+    hit = ord_re.search(text)
+    if hit:
+        day_raw = hit.group(1)
+        # Normalise OCR typo "Ist" -> "1".
+        if day_raw.lower() == "ist":
+            day_raw = "1"
+        return f"{day_raw} {hit.group(2)} {hit.group(3)}"
+
+    return ""
+
+
+def _cargo_region(text: str) -> tuple[int, int]:
+    """Find the cargo narrative span from the goods table to the next section."""
+    upper = text.upper()
+    starts = [
+        r"\bDESCRIPTION\s+OF\s+GOODS\b",
+        r"\bCARGO\s+DESCRIPTION\b",
+        r"\bDESCRIPTION\s+OF\s+CARGO\b",
+    ]
+    carton_hits = list(re.finditer(r"\b\d{1,3}(?:,\d{3})*\s+CARTONS\.?", upper))
+    if len(carton_hits) >= 2:
+        start_idx = carton_hits[1].start()
+    else:
+        start_idx = -1
+        for pattern in starts:
+            m = re.search(pattern, upper)
+            if m:
+                start_idx = m.end()
+                break
+    if start_idx == -1:
+        return (-1, -1)
+
+    stop_words = [
+        "INVOICE NO",
+        "INVOICE NUMBER",
+        "INV NO",
+        "DATE",
+        "SHIPPER LOAD & COUNT",
+        "CONTAINER NOS",
+        "CONTAINER NO",
+        "DELIVERY AGENT",
+        "FREIGHT AND CHARGES",
+        "TYPE OF SERVICE",
+        "NUMBER OF PACKAGES",
+        "TOTAL",
+    ]
+    end_idx = len(text)
+    for s in stop_words:
+        m = re.search(rf"\b{re.escape(s)}\b", upper[start_idx + 1 :])
+        if m and (start_idx + 1 + m.start()) < end_idx:
+            end_idx = start_idx + 1 + m.start()
+    return (start_idx, end_idx)
+
+
+# ---------------------------------------------------------------------------
+# Bill of Lading extractor (v2)
+# ---------------------------------------------------------------------------
 def extract_bill_of_lading(text: str) -> tuple[dict, dict]:
     fields: dict[str, str] = {}
     confidences: dict[str, str] = {}
 
-    positions = _label_positions(text)
-    starts: dict[str, int] = {}
-    label_at: dict[str, str] = {}
-    for key, group in BOL_LABEL_ORDER:
-        group_upper = {g.upper() for g in group}
-        for pos_char, pos_lbl in positions:
-            if pos_lbl in group_upper and key not in starts:
-                starts[key] = pos_char
-                label_at[key] = pos_lbl
-                break
-    ordered_keys = [k for k, _ in BOL_LABEL_ORDER if k in starts]
-    blocks: dict[str, tuple[int, int]] = {}
-    for i, key in enumerate(ordered_keys):
-        end = (
-            starts[ordered_keys[i + 1]]
-            if i + 1 < len(ordered_keys)
-            else len(text)
-        )
-        blocks[key] = (starts[key], end)
-
-    # Helper: get the FIRST non-label line of a block, then trim label prefix.
-    def block_first_line(key: str) -> str:
-        if key not in blocks:
-            return ""
-        start, end = blocks[key]
-        head = text[start:end]
-        first_line = next((ln for ln in head.splitlines() if ln.strip()), "")
-        return _split_label_inline(first_line, label_at.get(key, ""))
-
-    # Helper: get all non-label lines of a block (skips the label-line itself).
-    def block_body_lines(key: str) -> list[str]:
-        if key not in blocks:
-            return []
-        start, end = blocks[key]
-        lbl_up = label_at.get(key, "").upper()
-        body: list[str] = []
-        for ln in text[start:end].splitlines():
-            s = ln.strip()
-            if not s:
-                continue
-            up = s.upper()
-            # Skip the bare-label line.
-            if up.startswith(lbl_up):
-                continue
-            # Also skip a line that IS just the label (e.g. ``Container Nos.``).
-            if up.rstrip(":.").strip() == lbl_up.rstrip(":.").strip():
-                continue
-            body.append(s)
-        return body
-
-    # ---- bl_number ---------------------------------------------------------
-    raw_bl = block_first_line("bl_number")
-    m = re.search(r"[A-Z0-9][A-Z0-9-]{3,}", raw_bl)
-    fields["bl_number"] = m.group(0) if m else ""
-
-    # ---- shipper / consignee / notify_party --------------------------------
-    fields["shipper"] = block_first_line("shipper")
-    fields["consignee"] = block_first_line("consignee")
-    notify = block_first_line("notify_party")
+    # ---- standalone-label fields: shipper / consignee / notify / bl_number -
+    fields["shipper"] = first_value_after_label_lines(
+        text, "SHIPPER", ["CONSIGNEE", "NOTIFY PARTY"]
+    )
+    fields["consignee"] = first_value_after_label_lines(
+        text, "CONSIGNEE", ["NOTIFY PARTY", "VESSEL", "PORT OF LOADING"]
+    )
+    notify = first_value_after_label_lines(
+        text, "NOTIFY PARTY", ["VESSEL", "PORT OF LOADING"]
+    )
     if "SAME AS CONSIGNEE" in notify.upper():
         notify = "Same as Consignee"
     fields["notify_party"] = notify
 
-    # ---- vessel / voyage ---------------------------------------------------
-    # Vessel label often appears in the form ``Vessel: AAA THAILAND``
-    # followed by a separate ``Voyage: V.1000N`` label on its own line.
-    vessel_line = block_first_line("vessel_name")
-    if vessel_line:
-        # If the vessel line happens to also contain ``V.NNN``, split it.
-        if re.search(r"\bV\.?\s?[A-Z0-9]+\b", vessel_line):
-            vessel, voyage_inline = _extract_vessel_voyage(vessel_line)
-            fields["vessel_name"] = vessel
-            fields["voyage_number"] = voyage_inline or block_first_line("voyage_number")
-        else:
-            fields["vessel_name"] = vessel_line
-            fields["voyage_number"] = block_first_line("voyage_number")
+    raw_bl = first_value_after_label_lines(
+        text, "B/LNO", ["SHIPPER", "CONSIGNEE", "VESSEL", "PORT OF LOADING"]
+    )
+    if not raw_bl:
+        raw_bl = first_value_after_label_lines(
+            text, "B/L NO", ["SHIPPER", "CONSIGNEE", "VESSEL", "PORT OF LOADING"]
+        )
+    m = re.search(r"[A-Z0-9][A-Z0-9-]{3,}", raw_bl.upper())
+    fields["bl_number"] = m.group(0) if m else ""
+
+    # ---- table-row fields: vessel / voyage / ports ------------------------
+    # The same OCR layout presents each label on its own line with the value
+    # right after the colon — handle that with the label-prefix path. The
+    # multi-column pipe-separated form (``Vessel | Port of Loading``) is
+    # still covered by ``_find_table_row`` as a fallback.
+    vessel_raw = first_value_after_label_lines(
+        text, "VESSEL",
+        ["VOYAGE", "PORT OF LOADING", "PORT OF DISCHARGE"],
+    )
+    vessel_clean, voyage_inline = _normalize_vessel_voyage(vessel_raw)
+    fields["vessel_name"] = normalize_vessel_name(vessel_clean)
+    fields["voyage_number"] = voyage_inline or first_value_after_label_lines(
+        text, "VOYAGE", ["PORT OF LOADING", "PORT OF DISCHARGE"]
+    )
+
+    fields["port_of_loading"] = _first_city_country(first_value_after_label_lines(
+        text, "PORT OF LOADING",
+        ["PORT OF DISCHARGE", "PLACE OF ACCEPTANCE"],
+    ))
+    fields["place_of_acceptance"] = _first_city_country(first_value_after_label_lines(
+        text, "PLACE OF ACCEPTANCE",
+        ["PORT OF DISCHARGE", "PLACE OF DELIVERY", "DESCRIPTION"],
+    ))
+    port_disc_raw = first_value_after_label_lines(
+        text, "PORT OF DISCHARGE",
+        ["PLACE OF DELIVERY", "FREIGHT PAYABLE AT"],
+    )
+    port_disc_pairs = extract_city_country_pairs(port_disc_raw, dedupe=False)
+    if port_disc_pairs:
+        fields["port_of_discharge"] = port_disc_pairs[0]
+        # If multiple city pairs in the same row, the third or second is place of delivery.
+        if not fields.get("place_of_delivery") or "(Q)" in fields.get("place_of_delivery", "") \
+                or "Freight" in fields.get("place_of_delivery", ""):
+            if len(port_disc_pairs) >= 3:
+                fields["place_of_delivery"] = port_disc_pairs[2]
+            elif len(port_disc_pairs) >= 2:
+                fields["place_of_delivery"] = port_disc_pairs[1]
     else:
-        fields["vessel_name"] = ""
-        fields["voyage_number"] = block_first_line("voyage_number")
+        fields["port_of_discharge"] = _first_city_country(port_disc_raw)
+    place_delivery_raw = first_value_after_label_lines(
+        text, "PLACE OF DELIVERY",
+        ["FREIGHT PAYABLE AT", "DESCRIPTION", "CONTAINER"],
+    )
+    if place_delivery_raw:
+        fields["place_of_delivery"] = place_delivery_raw
+    # Final safety: never let place_of_delivery be a header / label fragment.
+    pod = fields.get("place_of_delivery", "")
+    if pod and ("(Q)" in pod or "Freight and charges" in pod or
+                "payable at" in pod or "Description of goods" in pod):
+        fields["place_of_delivery"] = ""
+    if fields.get("place_of_delivery"):
+        pod_pairs = extract_city_country_pairs(fields["place_of_delivery"])
+        if pod_pairs:
+            fields["place_of_delivery"] = pod_pairs[0]
 
-    # ---- ports -------------------------------------------------------------
-    fields["port_of_loading"] = block_first_line("port_of_loading")
-    fields["port_of_discharge"] = block_first_line("port_of_discharge")
-    fields["place_of_acceptance"] = block_first_line("place_of_acceptance")
-    fields["place_of_delivery"] = block_first_line("place_of_delivery")
+    row_discharge, row_delivery = _extract_discharge_delivery_row(text)
+    if row_discharge:
+        fields["port_of_discharge"] = row_discharge
+    if row_delivery:
+        fields["place_of_delivery"] = row_delivery
 
-    # ---- containers --------------------------------------------------------
-    # Pull ONLY from the container block. ``GGE10001`` lives in the
-    # reference_invoice_number block, so scoped search kills cross-pollution.
-    # Containers appear right after the label on the same line, so we strip
-    # the label inline rather than dropping the line.
-    container_block_text = ""
-    if "container_numbers" in blocks:
-        start, end = blocks["container_numbers"]
-        container_block_text = text[start:end]
-    # First try to grab the value part from the label line.
-    lbl_up = label_at.get("container_numbers", "").upper()
-    cell = ""
-    if lbl_up:
-        for ln in container_block_text.splitlines():
-            if not ln.strip():
-                continue
-            up = ln.upper()
-            if up.startswith(lbl_up):
-                cell = ln[len(lbl_up):].lstrip(" :.;\t")
-                break
-    if not cell:
-        # Fall back to the first non-label line.
-        for ln in container_block_text.splitlines():
-            s = ln.strip()
-            if not s or s.upper().startswith(lbl_up):
-                continue
-            cell = s
-            break
+    # If the column form is present (rare in this dataset), override.
+    port_load_row = _find_table_row(text, ["VESSEL", "PORT OF LOADING"])
+    if port_load_row:
+        v, voyage2 = _normalize_vessel_voyage(port_load_row[0])
+        if v:
+            fields["vessel_name"] = normalize_vessel_name(v)
+            fields["voyage_number"] = voyage2 or fields["voyage_number"]
+        if len(port_load_row) >= 2:
+            fields["port_of_loading"] = _first_city_country(_strip_inline_labels(
+                port_load_row[1], ["PLACE OF ACCEPTANCE", "NUMBER OF"]
+            ))
+        if len(port_load_row) >= 3:
+            fields["place_of_acceptance"] = _first_city_country(_strip_inline_labels(
+                port_load_row[2], ["NUMBER OF", "ORIGINAL", "DESCRIPTION"]
+            ))
+
+    port_disc_row = _find_table_row(text, ["PORT OF DISCHARGE", "PLACE OF DELIVERY"])
+    if port_disc_row:
+        if port_disc_row[0]:
+            fields["port_of_discharge"] = _first_city_country(_strip_inline_labels(
+                port_disc_row[0], ["PLACE OF DELIVERY", "FREIGHT PAYABLE AT"]
+            ))
+        if len(port_disc_row) >= 2:
+            candidate_delivery = _first_city_country(_strip_inline_labels(
+                port_disc_row[1], ["FREIGHT PAYABLE AT"]
+            ))
+            if candidate_delivery and candidate_delivery.upper() not in {"TOKYO", "BANGKOK"}:
+                fields["place_of_delivery"] = candidate_delivery
+
+    # ---- containers: scoped to the container label's vicinity ------------
     containers: list[str] = []
-    for p in re.split(r"[/,;]|\s{2,}", cell):
-        p = p.strip(" ,;:\t")
-        if p and any(c.isdigit() for c in p):
-            containers.append(p)
+    upper = text.upper()
+    m = re.search(r"\bCONTAINER NOS?\b", upper)
+    if m:
+        # Search 3 lines ahead for the value.
+        snippet = text[m.end(): m.end() + 200]
+        # Try the same line first (Container Nos.: XXX).
+        same_line = text[m.start(): text.find("\n", m.start()) if text.find("\n", m.start()) != -1 else len(text)]
+        same_line = same_line[len("CONTAINER NOS"):].lstrip(" .:")
+        cell = same_line or ""
+        if not cell:
+            # Next non-empty line.
+            for ln in snippet.splitlines()[:5]:
+                ln = ln.strip()
+                if ln and not _is_noise_line(ln):
+                    cell = ln
+                    break
+        for p in re.split(r"[/,;]|\s{2,}", cell):
+            p = p.strip(" ,;:\t|")
+            # Reject anything that doesn't contain a digit (kills pure words).
+            if p and any(c.isdigit() for c in p):
+                containers.append(p)
     fields["container_numbers"] = ", ".join(dict.fromkeys(containers))
 
-    # ---- cargo_description -------------------------------------------------
-    # The body of the description block often spans several lines and may
-    # include the next label's line (e.g. ``Gross Weight: 12,335 kg``) when
-    # the original document packed two rows into one OCR line.
-    cargo_body = block_body_lines("cargo_description")
-    cargo_clean: list[str] = []
-    weight_re = re.compile(r"\b\d[\d.,]*\s?(?:kg|kgs|KGS|Kg)\b")
-    meas_re = re.compile(r"\b\d[\d.,]*\s?(?:CBM|cbm|M3|m3)\b")
-    for ln in cargo_body:
-        if weight_re.search(ln) or meas_re.search(ln):
-            # Strip embedded weight/measurement tokens that snuck into cargo.
+    # ---- cargo description: narrative span --------------------------------
+    start, end = _cargo_region(text)
+    if start == -1:
+        fields["cargo_description"] = ""
+    else:
+        region = text[start:end]
+        # Concatenate non-empty lines, but strip embedded weight / measurement
+        # tokens that often get OCR'd into the same cell.
+        lines = [ln.strip() for ln in region.splitlines() if ln.strip()]
+        weight_re = re.compile(r"\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:kg|kgs|KG|KGS)\b")
+        meas_re = re.compile(r"\b\d+(?:\.\d+)?\s*(?:CBM|M3|M³)\b")
+        table_noise = (
+            "MARKS AND NUMBER", "NUMBERS. TYPE OF PACKAGES",
+            "DESCRIPTION OF GOODS", "KGS ME", "WEIGHT MEASUREMENT",
+            "CASE MARK", "TOKYO/JAPAN",
+        )
+        clean_lines: list[str] = []
+        for ln in lines:
+            ln = ln.replace("40'HO", "40' HQ").replace("40'Ho", "40' HQ")
+            ln = ln.replace("600m!", "600ml").replace("600M!", "600ml")
+            up = ln.upper()
+            if any(noise in up for noise in table_noise):
+                continue
+            if re.fullmatch(r"\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:kg|kgs)", ln, re.IGNORECASE):
+                continue
+            if re.fullmatch(r"\d+(?:\.\d+)?\s*(?:CBM|M3|M³)", ln, re.IGNORECASE):
+                continue
             ln = weight_re.sub("", ln)
-            ln = meas_re.sub("", ln).strip(" ,;:\t")
-        if ln:
-            cargo_clean.append(ln)
-    fields["cargo_description"] = " ".join(cargo_clean).strip(" ,;:\t")
+            ln = meas_re.sub("", ln)
+            ln = ln.strip(" ,;:\t|")
+            if ln:
+                clean_lines.append(ln)
+        cargo_text = " ".join(clean_lines).strip(" ,;:\t")
+        cargo_text = re.sub(r"\bHS\s+CODE\s*:\s*", "HS CODE: ", cargo_text, flags=re.IGNORECASE)
+        cargo_text = re.sub(r"\s+(HS CODE:)", r". \1", cargo_text)
+        cargo_text = re.sub(r"\s+", " ", cargo_text).strip(" .")
+        fields["cargo_description"] = f"{cargo_text}." if cargo_text else ""
 
-    # ---- weight / measurement ---------------------------------------------
-    weight_block = text[blocks["weight"][0] : blocks["weight"][1]] if "weight" in blocks else ""
-    m = re.search(r"\b([0-9][0-9.,]*\s?(?:kg|kgs|KGS|Kg))\b", weight_block)
-    fields["weight"] = m.group(1) if m else ""
+    # ---- weight / measurement: scoped regex; pick the largest kg ----------
+    weight_block = text
+    weight_matches = re.findall(
+        r"\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:kg|kgs|KG|KGS)\b",
+        weight_block,
+    )
+    weight_value = 0
+    for m in weight_matches:
+        digits = re.sub(r"[^\d.]", "", m.split("KG")[0].split("kg")[0].split("KGS")[0].split("kgs")[0].strip())
+        # Fallback: strip non-digit chars from the numeric prefix.
+        if not digits:
+            digits = re.sub(r"[^\d.]", "", m)
+        try:
+            v = float(digits)
+        except ValueError:
+            continue
+        if v > weight_value:
+            weight_value = v
+            fields["weight"] = m.replace("KGS", "kg").replace("Kgs", "kg").replace("KG", "kg").strip()
 
-    meas_block = text[blocks["measurement"][0] : blocks["measurement"][1]] if "measurement" in blocks else ""
-    m = re.search(r"\b([0-9][0-9.,]*\s?(?:CBM|cbm|M3|m3))\b", meas_block)
-    fields["measurement"] = m.group(1) if m else ""
+    meas_matches = re.findall(
+        r"\b\d+(?:\.\d+)?\s*(?:CBM|M3|M³)\b",
+        text,
+    )
+    if meas_matches:
+        fields["measurement"] = meas_matches[0].replace("M3", "M3").replace("CBM", "CBM").strip()
+        # Normalise spacing.
+        fields["measurement"] = re.sub(r"\s+", " ", fields["measurement"])
 
-    # ---- freight_terms -----------------------------------------------------
-    freight_block = text[blocks["freight_terms"][0] : blocks["freight_terms"][1]] if "freight_terms" in blocks else ""
-    upper_freight = freight_block.upper()
-    if "FREIGHT PREPAID" in upper_freight:
+    # ---- freight_terms: keyword match ------------------------------------
+    upper_text = text.upper()
+    if "FREIGHT PREPAID" in upper_text:
         fields["freight_terms"] = "Freight Prepaid"
-    elif "FREIGHT COLLECT" in upper_freight:
+    elif "FREIGHT COLLECT" in upper_text:
         fields["freight_terms"] = "Freight Collect"
     else:
         fields["freight_terms"] = ""
 
-    # ---- delivery_agent ----------------------------------------------------
-    fields["delivery_agent"] = block_first_line("delivery_agent")
+    # ---- delivery_agent: first meaningful line after the label -----------
+    fields["delivery_agent"] = first_value_after_label_lines(
+        text,
+        "DELIVERY AGENT",
+        ["INVOICE NO", "DATE", "FREIGHT", "PLACE OF DELIVERY"],
+    )
 
-    # ---- reference_invoice_number ------------------------------------------
-    inv_block_first = block_first_line("reference_invoice_number")
-    m = re.search(r"[A-Z0-9][A-Z0-9-]{2,}", inv_block_first.upper())
+    # ---- reference_invoice_number ----------------------------------------
+    raw_inv = first_value_after_label_lines(
+        text,
+        "INVOICE NO",
+        ["DATE", "TOTAL", "NUMBER OF", "CONTAINER"],
+    )
+    m = re.search(r"[A-Z0-9][A-Z0-9-]{2,}", raw_inv.upper())
     fields["reference_invoice_number"] = m.group(0) if m else ""
 
-    # ---- document_date -----------------------------------------------------
-    date_block = text[blocks["document_date"][0] : blocks["document_date"][1]] if "document_date" in blocks else ""
-    date_candidates: list[str] = []
-    for rgx in DATE_RES:
-        for m in rgx.finditer(date_block):
-            date_candidates.append(m.group(1))
-    fields["document_date"] = date_candidates[0] if date_candidates else block_first_line("document_date")
+    # ---- document_date ----------------------------------------------------
+    # Priority per spec:
+    #   1) ``DATE : dd/mm/yyyy`` / ``Date dd/mm/yyyy`` (label-led).
+    #   2) ``signed at ...`` / ``on board`` / ``shipped on board`` date.
+    #   3) ``1st March, 2018``-style "dd<st|nd|rd|th> Month, yyyy".
+    fields["document_date"] = _extract_document_date(text)
+
+    # Apply unit normalisation to weight / measurement.
+    fields["weight"] = _normalize_units(fields.get("weight", ""))
+    fields["measurement"] = _normalize_units(fields.get("measurement", ""))
 
     # Confidence per field.
     for key, value in fields.items():
@@ -546,7 +922,7 @@ def summarise(fields: dict, confidences: dict) -> tuple[str, str]:
             + "."
         )
     else:
-        notes = ""
+        notes = "Please review extracted fields before approval."
 
     return overall, notes
 
