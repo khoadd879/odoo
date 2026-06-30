@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_steamships_invoice_ocr_tree" model="ir.ui.view">
+        <field name="name">steamships.invoice.ocr.tree</field>
+        <field name="model">steamships.invoice.ocr</field>
+        <field name="arch" type="xml">
+            <list string="Supplier Invoices" decoration-info="state == 'pending_review'"
+                  decoration-success="state == 'approved'" decoration-danger="state == 'rejected'">
+                <field name="name"/>
+                <field name="vendor_name"/>
+                <field name="invoice_number"/>
+                <field name="invoice_date"/>
+                <field name="currency"/>
+                <field name="total_amount"/>
+                <field name="overall_confidence"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'pending_review'"
+                       decoration-success="state == 'approved'"
+                       decoration-danger="state == 'rejected'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_steamships_invoice_ocr_form" model="ir.ui.view">
+        <field name="name">steamships.invoice.ocr.form</field>
+        <field name="model">steamships.invoice.ocr</field>
+        <field name="arch" type="xml">
+            <form string="Supplier Invoice">
+                <header>
+                    <button name="action_approve" string="Approve" type="object"
+                            class="btn-primary"
+                            invisible="state != 'pending_review'"/>
+                    <button name="action_reject" string="Reject" type="object"
+                            class="btn-secondary"
+                            invisible="state != 'pending_review'"/>
+                    <button name="action_reset_to_draft" string="Reset to Draft" type="object"
+                            invisible="state in ('draft',)"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,pending_review,approved,rejected"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group string="Review Notes" name="review_notes">
+                        <field name="overall_confidence" widget="badge"
+                               decoration-info="overall_confidence == 'high'"
+                               decoration-warning="overall_confidence == 'medium'"
+                               decoration-danger="overall_confidence == 'low'"/>
+                        <field name="low_confidence_notes" placeholder="No low-confidence warnings"/>
+                    </group>
+
+                    <group string="Extracted Supplier Invoice Fields" name="extracted">
+                        <group>
+                            <field name="vendor_name"/>
+                            <field name="invoice_number"/>
+                            <field name="invoice_date"/>
+                        </group>
+                        <group>
+                            <field name="due_date"/>
+                            <field name="currency"/>
+                            <field name="payment_terms"/>
+                        </group>
+                        <group>
+                            <field name="subtotal_amount"/>
+                            <field name="tax_amount"/>
+                            <field name="total_amount"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Original Document" name="original_doc">
+                            <group>
+                                <field name="original_filename" readonly="1"/>
+                                <field name="original_mimetype" readonly="1"/>
+                                <field name="original_file" filename="original_filename"
+                                       readonly="1"/>
+                            </group>
+                        </page>
+                        <page string="Raw OCR Text" name="raw_text">
+                            <field name="raw_ocr_text" readonly="1" nolabel="1"/>
+                        </page>
+                        <page string="Raw JSON" name="raw_json">
+                            <field name="raw_json" readonly="1" nolabel="1"
+                                   widget="ace" options="{'mode': 'json'}"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_steamships_invoice_ocr" model="ir.actions.act_window">
+        <field name="name">Supplier Invoices</field>
+        <field name="res_model">steamships.invoice.ocr</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="view_steamships_invoice_ocr_tree"/>
+    </record>
+</odoo>

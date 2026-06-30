@@ -83,6 +83,39 @@
                     </div>
                 </div>
 
+                <style>
+                    .ssai-answer strong {
+                        color: #071b33;
+                        font-weight: 800;
+                    }
+                    .ssai-md-heading {
+                        border-left: 3px solid #12b8a6;
+                        color: #071b33;
+                        font-size: 0.98rem;
+                        font-weight: 800;
+                        margin: 0.95rem 0 0.4rem;
+                        padding-left: 0.55rem;
+                    }
+                    .ssai-md-heading:first-child {
+                        margin-top: 0;
+                    }
+                    .ssai-md-p {
+                        margin: 0 0 0.45rem;
+                    }
+                    .ssai-md-list {
+                        margin: 0 0 0.75rem 1.25rem;
+                        padding: 0;
+                    }
+                    .ssai-md-list li {
+                        margin: 0.16rem 0;
+                    }
+                    .ssai-source-chips .badge {
+                        font-size: 0.76rem;
+                        max-width: 100%;
+                        white-space: normal;
+                    }
+                </style>
+
                 <!-- ========================================================
                      Vanilla JS — fetch API + JSON-RPC envelope.
                      Listens to DOMContentLoaded. No jQuery, no web.ajax.
@@ -123,6 +156,71 @@
                                 .replace(/&gt;/g, '&amp;gt;')
                                 .replace(/"/g, '&amp;quot;')
                                 .replace(/'/g, '&#39;');
+                        }
+
+                        function stripCommonHtml(value) {
+                            return String(value || '')
+                                .replace(/<br\s*\/?\s*>/gi, '\n')
+                                .replace(/<\/p>/gi, '\n')
+                                .replace(/<\/?(?:p|strong|b|em|ul|ol|li|h[1-6])\b[^>]*>/gi, '');
+                        }
+
+                        function renderMarkdownInline(value) {
+                            return escapeHtml(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                        }
+
+                        function renderMarkdown(value) {
+                            var lines = stripCommonHtml(value).replace(/\r\n/g, '\n').split('\n');
+                            var html = [];
+                            var listType = null;
+
+                            function closeList() {
+                                if (listType) {
+                                    html.push('</' + listType + '>');
+                                    listType = null;
+                                }
+                            }
+
+                            function openList(type) {
+                                if (listType !== type) {
+                                    closeList();
+                                    html.push('<' + type + ' class="ssai-md-list">');
+                                    listType = type;
+                                }
+                            }
+
+                            lines.forEach(function (line) {
+                                var trimmed = line.trim();
+                                var heading;
+                                var bullet;
+                                var numbered;
+                                if (!trimmed) {
+                                    closeList();
+                                    return;
+                                }
+                                heading = trimmed.match(/^###\s+(.+)$/);
+                                if (heading) {
+                                    closeList();
+                                    html.push('<h4 class="ssai-md-heading">' + renderMarkdownInline(heading[1]) + '</h4>');
+                                    return;
+                                }
+                                bullet = trimmed.match(/^[-*]\s+(.+)$/);
+                                if (bullet) {
+                                    openList('ul');
+                                    html.push('<li>' + renderMarkdownInline(bullet[1]) + '</li>');
+                                    return;
+                                }
+                                numbered = trimmed.match(/^\d+\.\s+(.+)$/);
+                                if (numbered) {
+                                    openList('ol');
+                                    html.push('<li>' + renderMarkdownInline(numbered[1]) + '</li>');
+                                    return;
+                                }
+                                closeList();
+                                html.push('<p class="ssai-md-p">' + renderMarkdownInline(trimmed) + '</p>');
+                            });
+                            closeList();
+                            return html.join('') || '<p class="ssai-md-p text-muted small">No answer returned.</p>';
                         }
 
                         function scrollToBottom() {
@@ -200,17 +298,28 @@
                             return html;
                         }
 
-                        // The backend (rag_api) converts the LLM's Markdown to
-                        // HTML before returning, so `answer` is already safe
-                        // HTML (a controlled set of tags from python-markdown).
-                        // We intentionally do NOT escape it.
+                        function sourceLabel(source) {
+                            if (typeof source === 'string') return source;
+                            if (source) return source.name || source.doc_name || source.filename || source.section || source.title || 'Source';
+                            return 'Source';
+                        }
+
+                        function renderSourceChips(sources, chunks) {
+                            var labels = sources && sources.length ? sources : (chunks || []).map(sourceLabel);
+                            if (!labels || !labels.length) return '';
+                            return '<div class="ssai-source-chips mt-2">' + labels.slice(0, 6).map(function (source) {
+                                return '<span class="badge rounded-pill text-bg-info-subtle border border-info-subtle text-info-emphasis me-1 mb-1"><strong>'
+                                    + escapeHtml(sourceLabel(source)) + '</strong></span>';
+                            }).join('') + '</div>';
+                        }
+
                         function renderAnswer(answer) {
                             if (!answer || !answer.trim()) {
                                 return '<div class="text-muted small">'
-                                    + 'I do not know — please ask the '
-                                    + 'appropriate team.</div>';
+                                    + 'I don\'t know based on the available documents. '
+                                    + 'Please ask the Sales Operations team.</div>';
                             }
-                            return '<div class="ssai-answer">' + answer + '</div>';
+                            return '<div class="ssai-answer">' + renderMarkdown(answer) + '</div>';
                         }
 
                         function appendAssistantAnswer(payload) {
@@ -221,6 +330,7 @@
                                 + 'Assistant</div>'
                                 + '<div class="ssai-bubble p-2 px-3 rounded border bg-light-subtle">'
                                 + renderAnswer(payload.answer || '')
+                                + renderSourceChips(payload.sources || [], payload.chunks || [])
                                 + '</div>';
 
                             var chunks = payload.chunks || [];

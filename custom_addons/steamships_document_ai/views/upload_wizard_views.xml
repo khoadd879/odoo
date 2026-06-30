@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_steamships_document_upload_wizard" model="ir.ui.view">
+        <field name="name">steamships.document.upload.wizard.form</field>
+        <field name="model">steamships.document.upload.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Upload Document for OCR" create="0" edit="1">
+                <group>
+                    <field name="document_type" widget="radio"
+                           options="{'horizontal': true}"/>
+                    <field name="file" filename="filename"
+                           placeholder="Choose a PDF or image (PNG/JPG)..."/>
+                    <field name="filename" invisible="1"/>
+                    <field name="mimetype" invisible="1"/>
+                </group>
+                <footer>
+                    <button name="action_upload_extract" string="Upload &amp; Extract"
+                            type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_steamships_document_upload" model="ir.actions.act_window">
+        <field name="name">Upload &amp; OCR</field>
+        <field name="res_model">steamships.document.upload.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="view_id" ref="view_steamships_document_upload_wizard"/>
+    </record>
+</odoo>
