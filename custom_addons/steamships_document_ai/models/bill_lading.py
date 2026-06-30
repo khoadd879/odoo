@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 from datetime import datetime
 
 from odoo import _, api, fields, models
@@ -239,7 +240,19 @@ def _parse_date(value):
     if isinstance(value, datetime):
         return value.date()
     text = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%b-%Y", "%d %b %Y"):
+    # Strip ordinal suffixes like ``1st``, ``2nd``, ``3rd``, ``4th``.
+    text = re.sub(r"(\d+)(st|nd|rd|th)\b", r"\1", text, flags=re.IGNORECASE)
+    for fmt in (
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+        "%d-%b-%Y",
+        "%d %b %Y",
+        "%d %B %Y",
+        "%d %B, %Y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+    ):
         try:
             return datetime.strptime(text, fmt).date()
         except (ValueError, TypeError):
