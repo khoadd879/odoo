@@ -24,6 +24,8 @@ import pytesseract
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
 
+from vision_ai import maybe_ai_boost
+
 logger = logging.getLogger("document_ai")
 logging.basicConfig(level=logging.INFO)
 
@@ -987,8 +989,8 @@ def health() -> dict:
     return {"status": "ok", "service": "steamships-document-ai"}
 
 
-async def _read_and_ocr(file: UploadFile) -> tuple[str, bool]:
-    """Render + OCR the upload. Returns (text, ok)."""
+async def _read_and_ocr(file: UploadFile) -> tuple[bytes, str, bool]:
+    """Render + OCR the upload. Returns (content, text, ok)."""
     if file is None:
         raise HTTPException(status_code=400, detail="No file uploaded.")
 
@@ -998,14 +1000,14 @@ async def _read_and_ocr(file: UploadFile) -> tuple[str, bool]:
 
     pages = render_pages(content, file.content_type)
     if not pages:
-        return "", False
+        return content, "", False
 
-    return ocr_pages(pages), True
+    return content, ocr_pages(pages), True
 
 
 @app.post("/api/ocr/invoice")
 async def ocr_invoice(file: UploadFile = File(...)):
-    text, ok = await _read_and_ocr(file)
+    content, text, ok = await _read_and_ocr(file)
     if not ok:
         return {
             "error": "render_failed",
@@ -1035,6 +1037,14 @@ async def ocr_invoice(file: UploadFile = File(...)):
         }
 
     fields, confidences = extract_invoice(text)
+    fields, confidences, vision_used, vision_warning = maybe_ai_boost(
+        file_bytes=content,
+        mimetype=file.content_type,
+        doc_type="invoice",
+        raw_text=text,
+        fields=fields,
+        confidences=confidences,
+    )
     overall, notes = summarise(fields, confidences)
     return {
         "document_type": "invoice",
@@ -1044,12 +1054,14 @@ async def ocr_invoice(file: UploadFile = File(...)):
         "overall_confidence": overall,
         "low_confidence_notes": notes,
         "raw_text": text[:8000],
+        "vision_ai_used": vision_used,
+        "vision_ai_warning": vision_warning,
     }
 
 
 @app.post("/api/ocr/bill-of-lading")
 async def ocr_bill_of_lading(file: UploadFile = File(...)):
-    text, ok = await _read_and_ocr(file)
+    content, text, ok = await _read_and_ocr(file)
     if not ok:
         return {
             "error": "render_failed",
@@ -1059,6 +1071,14 @@ async def ocr_bill_of_lading(file: UploadFile = File(...)):
 
     detected = detect_document_type(text)
     fields, confidences = extract_bill_of_lading(text)
+    fields, confidences, vision_used, vision_warning = maybe_ai_boost(
+        file_bytes=content,
+        mimetype=file.content_type,
+        doc_type="bill_of_lading",
+        raw_text=text,
+        fields=fields,
+        confidences=confidences,
+    )
     overall, notes = summarise(fields, confidences)
     # We always return the B/L schema. ``detected_document_type`` surfaces
     # the classifier's call so the wizard can reject a pure-invoice doc.
@@ -1070,4 +1090,6 @@ async def ocr_bill_of_lading(file: UploadFile = File(...)):
         "overall_confidence": overall,
         "low_confidence_notes": notes,
         "raw_text": text[:8000],
+        "vision_ai_used": vision_used,
+        "vision_ai_warning": vision_warning,
     }

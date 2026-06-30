@@ -18,6 +18,8 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY main.py /app/main.py
+COPY vision_ai.py /app/vision_ai.py
+COPY test_vision_ai.py /app/test_vision_ai.py
 
 EXPOSE 9100
 
