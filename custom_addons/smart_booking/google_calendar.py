@@ -36,6 +36,7 @@ import datetime
 import json
 import logging
 import os
+import secrets as _secrets
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -43,6 +44,10 @@ import urllib.request
 from odoo import fields
 
 _logger = logging.getLogger(__name__)
+
+# Module-specific ICP key holding a 256-bit random secret used for HMAC
+# signing the OAuth ``state`` parameter. Generated lazily on first use.
+STATE_SECRET_ICP_KEY = "smart_booking.google_calendar_state_secret"
 
 # --- Google Calendar API constants ----------------------------------------
 GOOGLE_AUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -54,15 +59,25 @@ TOKEN_EXPIRY_SAFETY_MARGIN = datetime.timedelta(seconds=60)
 
 
 # --- Configuration helpers ------------------------------------------------
+def _icp_read(env, key):
+    """Read a single ``ir.config_parameter`` value via direct search.
+
+    We avoid ``get_param`` here because on this Odoo 19 build it returns
+    ``""`` from inside ``auth="user"`` controllers even when the row has a
+    non-empty value. Same workaround documented for the OAuth state secret.
+    """
+    rec = env["ir.config_parameter"].sudo().search(
+        [("key", "=", key)], limit=1)
+    return rec.value if rec and rec.value else ""
+
+
 def _get_config(env, key):
     """Read a Google credential from ``ir.config_parameter`` then env.
 
     Returns an empty string if neither source is set so callers can decide
     how to handle a missing value.
     """
-    icp_value = (
-        env["ir.config_parameter"].sudo().get_param(key, default="") or ""
-    )
+    icp_value = _icp_read(env, key)
     if icp_value:
         return icp_value
     return os.environ.get(key, "") or ""
@@ -95,6 +110,27 @@ def is_configured(env):
 
 
 # --- OAuth flow helpers ---------------------------------------------------
+def _get_state_secret(env):
+    """Return (and lazily create) the module-specific HMAC secret.
+
+    Stored in ``ir.config_parameter`` under a key owned by this module so it
+    is independent of database bootstrap data. We use a direct ``search()``
+    rather than ``get_param`` because the latter returns ``""`` from inside
+    ``auth="user"`` controllers on this Odoo 19 build.
+    """
+    ICP = env["ir.config_parameter"].sudo()
+
+    def _read(key):
+        rec = ICP.search([("key", "=", key)], limit=1)
+        return rec.value if rec and rec.value else ""
+
+    secret = _read(STATE_SECRET_ICP_KEY)
+    if not secret:
+        secret = _secrets.token_urlsafe(32)
+        ICP.set_param(STATE_SECRET_ICP_KEY, secret)
+    return secret or ""
+
+
 def build_authorize_url(env, state):
     """Compose the Google consent URL with ``state`` for CSRF protection.
 
@@ -357,29 +393,18 @@ def push_event_to_google(env, event, user):
 def make_signed_state(env, user_id):
     """Return an opaque, signed ``state`` value for OAuth round-trip.
 
-    Format: ``"<user_id>:<hmac>"``. We use the database secret
-    (``database.secret``) when available, falling back to a HMAC keyed
-    by ``ir.config_parameter`` ``database.uuid`` (always seeded) so the
-    value is non-guessable without an attacker already having full
-    database access.
+    Format: ``"<user_id>:<hmac>"``. HMAC keyed by a module-specific random
+    secret stored in ``ir.config_parameter`` (see ``_get_state_secret``).
 
-    We deliberately avoid raising if neither secret is available; in that
-    case the state will still carry the user_id but with a static
-    fallback marker so the callback can refuse to act.
+    We deliberately avoid raising if the secret is empty; in that case the
+    state still carries the user_id but with an empty MAC marker so the
+    callback can refuse to act.
     """
     import hmac
     import hashlib
 
-    secret = env["res.config.settings"].sudo().get_database_secret() or ""
+    secret = _get_state_secret(env) or ""
     if not secret:
-        # ``database.uuid`` is seeded by Odoo on first init; never empty.
-        secret = (
-            env["ir.config_parameter"].sudo().get_param(
-                "database.uuid", default="") or ""
-        )
-    if not secret:
-        # Last-resort: empty secret leaves the state user-trust only via
-        # session, which is fine because /callback uses auth="user".
         mac = ""
     else:
         mac = hmac.new(
@@ -391,13 +416,12 @@ def make_signed_state(env, user_id):
 
 
 def verify_signed_state(env, state, expected_user_id):
-    """Validate ``state`` matches ``expected_user_id``.
+    """Validate ``state`` matches ``expected_user_id`` and is HMAC-verified.
 
-    Returns True if the embedded user id matches *and* the MAC verifies
-    when a secret is available. When no secret is available, returns
-    True if the user id matches — this is acceptable because the OAuth
-    callback always goes through Odoo auth="user" which itself validates
-    the session.
+    Returns True when the embedded user id matches *and* the MAC verifies
+    when a secret is available. When no secret is available, falls back to
+    user-id match only — acceptable because the OAuth callback always goes
+    through Odoo ``auth="user"`` which already validates the session.
     """
     import hmac
     import hashlib
@@ -409,14 +433,8 @@ def verify_signed_state(env, state, expected_user_id):
         return False
     if user_id_int != expected_user_id:
         return False
-    secret = env["res.config.settings"].sudo().get_database_secret() or ""
+    secret = _get_state_secret(env) or ""
     if not secret:
-        secret = (
-            env["ir.config_parameter"].sudo().get_param(
-                "database.uuid", default="") or ""
-        )
-    if not secret:
-        # No secret to compare against; rely on Odoo session auth.
         return True
     expected_mac = hmac.new(
         secret.encode("utf-8"),
