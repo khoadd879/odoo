@@ -1,0 +1,61 @@
+<h2>Header treatment for the booking page</h2>
+<p class="subtitle">The booking page will move away from the current dark navy/gold style. The main open choice is how much of the normal Odoo website chrome to keep.</p>
+
+<div class="cards">
+  <div class="card" data-choice="custom-mini-header" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#f8fafc;border:1px solid #dbe3ef;border-radius:18px;padding:18px;font-family:Inter,system-ui,sans-serif;color:#123;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
+          <strong style="font-size:18px;color:#0f3f8c;">Steamships</strong>
+          <div style="display:flex;gap:18px;font-size:13px;color:#526070;"><span>Home</span><span>Contact us</span><span style="color:#0f66d0;font-weight:700;">Booking</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+          <div>
+            <div style="height:12px;width:90px;background:#dceafe;border-radius:99px;margin-bottom:12px;"></div>
+            <div style="height:28px;width:80%;background:#183b6d;border-radius:8px;margin-bottom:8px;"></div>
+            <div style="height:12px;width:70%;background:#d9e2ef;border-radius:6px;margin-bottom:18px;"></div>
+            <div style="display:flex;gap:8px;"><div style="height:54px;flex:1;background:white;border:1px solid #dbe3ef;border-radius:12px;"></div><div style="height:54px;flex:1;background:white;border:1px solid #dbe3ef;border-radius:12px;"></div></div>
+          </div>
+          <div style="background:white;border:1px solid #dbe3ef;border-radius:18px;box-shadow:0 16px 36px rgba(15,48,92,.10);padding:16px;">
+            <div style="height:18px;background:#183b6d;border-radius:8px;width:45%;margin-bottom:12px;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;"><div style="height:44px;border:2px solid #0f66d0;background:#edf6ff;border-radius:12px;"></div><div style="height:44px;border:1px solid #dbe3ef;border-radius:12px;"></div></div>
+            <div style="height:36px;border:1px solid #dbe3ef;border-radius:10px;margin-bottom:8px;"></div>
+            <div style="height:36px;border:1px solid #dbe3ef;border-radius:10px;margin-bottom:12px;"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"><span style="height:34px;width:58px;border:1px solid #dbe3ef;border-radius:10px;"></span><span style="height:34px;width:58px;background:#0f66d0;border-radius:10px;"></span><span style="height:34px;width:58px;border:1px solid #dbe3ef;border-radius:10px;"></span></div>
+            <div style="height:42px;background:#0f66d0;border-radius:12px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Custom mini-header (recommended)</h3>
+      <p>Clean Steamships wordmark plus Home / Contact us / Booking, then the two-column hero and form. Avoids public users seeing admin chrome or placeholder branding.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="normal-website-header" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#fff;border:1px solid #dbe3ef;border-radius:18px;padding:18px;font-family:Inter,system-ui,sans-serif;color:#123;">
+        <div style="height:42px;border:1px dashed #cbd5e1;border-radius:12px;display:flex;align-items:center;padding:0 14px;margin-bottom:22px;color:#64748b;">Existing Odoo website header / menu</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+          <div>
+            <div style="height:30px;width:80%;background:#183b6d;border-radius:8px;margin-bottom:8px;"></div>
+            <div style="height:12px;width:70%;background:#d9e2ef;border-radius:6px;margin-bottom:18px;"></div>
+            <div style="height:54px;background:#f8fafc;border:1px solid #dbe3ef;border-radius:12px;"></div>
+          </div>
+          <div style="background:white;border:1px solid #dbe3ef;border-radius:18px;box-shadow:0 16px 36px rgba(15,48,92,.10);padding:16px;">
+            <div style="height:18px;background:#183b6d;border-radius:8px;width:45%;margin-bottom:12px;"></div>
+            <div style="height:36px;border:1px solid #dbe3ef;border-radius:10px;margin-bottom:8px;"></div>
+            <div style="height:42px;background:#0f66d0;border-radius:12px;margin-top:48px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Keep normal website header</h3>
+      <p>Most integrated if the installed site menu is polished, but risky if it still shows “Your Logo” or an Administrator dropdown in local/public testing.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">Please pick A or B in the browser, or reply here with a preference. I recommend A for a safe public booking experience.</p>

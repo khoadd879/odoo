@@ -65,14 +65,14 @@
                             </t>
                             <t t-else="">
                                 <a t-att-href="connect_url"
-                                   t-att-disabled="'disabled' if not configured else None"
-                                   t-attf-class="ssbk-btn ssbk-btn-primary #{'ssbk-btn-disabled' if not configured else ''}">
+                                   t-att-disabled="'disabled' if not sb_configured else None"
+                                   t-attf-class="ssbk-btn ssbk-btn-primary #{'ssbk-btn-disabled' if not sb_configured else ''}">
                                     Connect Google Calendar
                                 </a>
                             </t>
                         </div>
 
-                        <t t-if="not configured">
+                        <t t-if="not sb_configured">
                             <p class="ssbk-helper ssbk-helper-warn">
                                 Google Calendar integration is not configured.
                                 Set the following system parameters or

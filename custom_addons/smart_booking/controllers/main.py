@@ -31,6 +31,7 @@ the lead.
 
 import datetime
 import logging
+import re
 import secrets
 import urllib.parse
 
@@ -62,6 +63,9 @@ TIMEZONE_OPTIONS = [
 ]
 PUBLIC_TZ_WHITELIST = ("Pacific/Port_Moresby", "Asia/Singapore",
                        "Asia/Ho_Chi_Minh", "Australia/Sydney")
+SLOT_HOURS = ((9, 0), (10, 0), (11, 0), (14, 0), (15, 0), (16, 0))
+BUSINESS_SLOT_DAYS = 5
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
 # Fields on crm.lead that the public form is allowed to prefill from.
 # Whitelisted to avoid leaking private/financial info.
 PUBLIC_LEAD_FIELDS = (
@@ -122,52 +126,85 @@ def _google_calendar_url(event, client_tz_label):
     return base + "&" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
 
 
-def _build_demo_slots():
-    """Return a list of dicts describing the fixed demo slots in PNG time.
+def _slot_key(slot_png_local):
+    """Return the public form key for an exact PNG-local slot."""
+    return slot_png_local.strftime("%Y-%m-%d_%H_%M")
 
-    Each entry: { "label_png": "Mon 09:00", "weekday": 0, "hour": 9,
-                  "minute": 0 }. Slots are valid Monday=0 .. Friday=4.
+
+def _slot_payload(slot_png_local):
+    """Build one public slot payload from a PNG-local naive datetime."""
+    slot_utc_naive = _png_local_to_utc(slot_png_local).replace(tzinfo=None)
+    return {
+        "key": _slot_key(slot_png_local),
+        "date": slot_png_local.strftime("%Y-%m-%d"),
+        "day_label": slot_png_local.strftime("%A, %d %b"),
+        "weekday_label": slot_png_local.strftime("%a"),
+        "hour": slot_png_local.hour,
+        "minute": slot_png_local.minute,
+        "label_png": "PNG %02d:%02d" % (slot_png_local.hour, slot_png_local.minute),
+        "utc_iso": slot_utc_naive.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def _build_upcoming_slot_days(now_utc=None, business_days=BUSINESS_SLOT_DAYS):
+    """Return grouped upcoming business slots from the current PNG time.
+
+    The public page should never show stale demo dates. Slots are generated
+    for the next `business_days` Monday-Friday dates. If today is a business
+    day, only future slots later than the current PNG time are included.
     """
-    fixed_hours = [(9, 0), (10, 0), (11, 0), (14, 0), (15, 0), (16, 0)]
-    weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-    return [
-        {"weekday": wd, "weekday_label": weekday_labels[wd],
-         "hour": h, "minute": m, "label_png": "%s %02d:%02d" % (weekday_labels[wd], h, m)}
-        for wd in range(0, 5) for h, m in fixed_hours
-    ]
+    now_utc = now_utc or datetime.datetime.utcnow()
+    now_png = (now_utc + datetime.timedelta(hours=PNG_TZ_OFFSET_HOURS)).replace(
+        tzinfo=None)
+    cursor = now_png.replace(hour=0, minute=0, second=0, microsecond=0)
+    days = []
+
+    while len(days) < business_days:
+        if cursor.weekday() < 5:
+            slots = []
+            for hour, minute in SLOT_HOURS:
+                slot_png_local = cursor.replace(
+                    hour=hour, minute=minute, second=0, microsecond=0)
+                if slot_png_local > now_png:
+                    slots.append(_slot_payload(slot_png_local))
+            if slots:
+                days.append({
+                    "date": cursor.strftime("%Y-%m-%d"),
+                    "day_label": cursor.strftime("%A, %d %b"),
+                    "slots": slots,
+                })
+        cursor += datetime.timedelta(days=1)
+
+    return days
 
 
-def _resolve_slot_iso(slot_key):
-    """Resolve a "<weekday>_<HH>_<MM>" key to a PNG-local datetime + UTC datetime.
+def _flatten_slot_days(slot_days):
+    """Return a flat slot list from grouped slot days."""
+    return [slot for day in slot_days for slot in day.get("slots", [])]
 
-    The slot_key is the slot displayed in the visitor timezone but stored in
-    PNG time on the server. We accept either the raw PNG slot or its
-    visitor-local counterpart by re-interpreting the key parts.
 
-    For demo simplicity we treat each slot key as the PNG-local slot.
+def _resolve_slot_iso(slot_key, available_slot_days=None):
+    """Resolve an exact public slot key to PNG-local and UTC datetimes.
+
+    Valid keys look like `YYYY-MM-DD_HH_MM`. The key must match one of the
+    currently generated upcoming slots, which prevents stale/past form posts.
     """
+    available_slot_days = available_slot_days or _build_upcoming_slot_days()
+    valid_slots = {
+        slot["key"]: slot
+        for slot in _flatten_slot_days(available_slot_days)
+    }
+    if slot_key not in valid_slots:
+        raise ValidationError(_("Please choose an available future time slot."))
+
     try:
-        weekday_str, hh_str, mm_str = slot_key.split("_")
-        weekday = int(weekday_str)
-        hh = int(hh_str)
-        mm = int(mm_str)
-    except (ValueError, AttributeError):
+        date_str, hh_str, mm_str = slot_key.rsplit("_", 2)
+        year_str, month_str, day_str = date_str.split("-")
+        slot_png_local = datetime.datetime(
+            int(year_str), int(month_str), int(day_str), int(hh_str), int(mm_str))
+    except (TypeError, ValueError):
         raise ValidationError(_("Invalid slot selection."))
-    if weekday < 0 or weekday > 4:
-        raise ValidationError(_("Slot must be Monday to Friday."))
-    # Today at 00:00 PNG local, then offset to next given weekday.
-    today_png = (datetime.datetime.utcnow()
-                 + datetime.timedelta(hours=PNG_TZ_OFFSET_HOURS)).replace(
-        hour=0, minute=0, second=0, microsecond=0)
-    # Find next valid weekday (>= today).
-    days_ahead = (weekday - today_png.weekday()) % 7
-    if days_ahead == 0:
-        # Same weekday — only valid if slot is later today; else roll 7 days.
-        candidate = today_png.replace(hour=hh, minute=mm)
-        if candidate <= today_png:
-            days_ahead = 7
-    slot_png_local = today_png + datetime.timedelta(days=days_ahead)
-    slot_png_local = slot_png_local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+
     slot_utc_naive = _png_local_to_utc(slot_png_local)
     return slot_png_local, slot_utc_naive.replace(tzinfo=None)
 
@@ -199,16 +236,57 @@ def _resolve_salesperson_user(lead, request_env):
         caller = UserSudo.browse(caller_id)
         if caller.exists() and not caller.share:
             return caller
-    # Fallbacks: try admin, then any user (e.g. demo data).
+    # Fallbacks: try admin, then a non-share internal user. Avoid a blank
+    # sudo().search([]) in this public flow.
     admin_ref = request_env.ref("base.user_admin", raise_if_not_found=False)
     if admin_ref and admin_ref.sudo().exists():
         return admin_ref.sudo()
-    user = UserSudo.with_context(active_test=False).search([], limit=1)
+    user = UserSudo.with_context(active_test=False).search(
+        [("share", "=", False)], limit=1)
     if user:
         return user
     raise ValidationError(_(
         "No sales user found to assign the booking to. Please contact "
         "your administrator."))
+
+
+def _build_website_lead_description(meeting_label, name, email, company,
+                                    timezone_name, slot_png_local,
+                                    duration_minutes, notes):
+    """Return a safe CRM lead description for a public website booking."""
+    png_stop = slot_png_local + datetime.timedelta(minutes=duration_minutes)
+    lines = [
+        "Website booking submitted from /steamships/booking.",
+        "",
+        "Meeting type: %s" % meeting_label,
+        "Name: %s" % name,
+        "Email: %s" % email,
+        "Company: %s" % company,
+        "Client timezone: %s" % timezone_name,
+        "PNG time: %s – %s" % (
+            slot_png_local.strftime("%A, %d %b %Y %H:%M"),
+            png_stop.strftime("%H:%M"),
+        ),
+        "",
+        "Notes: %s" % (notes or "—"),
+    ]
+    return "\n".join(lines)
+
+
+def _extract_public_booking_summary(description):
+    """Extract public booking fields from the event description.
+
+    The thank-you page can show these values because they came from the
+    visitor's own submitted public form fields. It must not render the full
+    description or any CRM internals.
+    """
+    summary = {"email": "", "company": ""}
+    for line in (description or "").splitlines():
+        if line.startswith("Email: "):
+            summary["email"] = line.partition(": ")[2]
+        elif line.startswith("Company: "):
+            summary["company"] = line.partition(": ")[2]
+    return summary
 
 
 class SteamshipsBookingController(http.Controller):
@@ -257,7 +335,7 @@ class SteamshipsBookingController(http.Controller):
                 "prefilled": prefilled,
                 "meeting_types": MEETING_TYPE_LABELS,
                 "timezones": TIMEZONE_OPTIONS,
-                "slots": _build_demo_slots(),
+                "slot_days": _build_upcoming_slot_days(),
                 "booking_token": booking_token,
             },
         )
@@ -283,15 +361,28 @@ class SteamshipsBookingController(http.Controller):
         notes = (post.get("notes") or "").strip()
         lead_id_raw = (post.get("lead_id") or "").strip()
         booking_token = (post.get("booking_token") or "").strip()
+        website_url = (post.get("website_url") or "").strip()
+
+        # Honeypot: bots often fill hidden URL/company fields. Do not create any
+        # records and do not reveal validation details.
+        if website_url:
+            _logger.info(
+                "Honeypot triggered on booking submit (token=%s)",
+                booking_token or "—")
+            return http.request.redirect("/steamships/booking/thanks")
 
         if meeting_type not in DURATION_MINUTES:
             raise ValidationError(_("Please pick a valid meeting type."))
-        if not name or not email:
-            raise ValidationError(_("Name and email are required."))
+        if not name:
+            raise ValidationError(_("Name is required."))
+        if not email or not EMAIL_RE.match(email):
+            raise ValidationError(_("Please provide a valid work email."))
+        if not company:
+            raise ValidationError(_("Company is required."))
         if timezone_name not in PUBLIC_TZ_WHITELIST:
             raise ValidationError(_("Please pick a supported timezone."))
-        if "@" not in email:
-            raise ValidationError(_("Please provide a valid email."))
+        if not slot_key:
+            raise ValidationError(_("Please choose a time slot."))
 
         # Idempotency: if a booking_token was posted and we already have an
         # event with that token, just redirect to the thank-you page. This
@@ -304,7 +395,9 @@ class SteamshipsBookingController(http.Controller):
                     "/steamships/booking/thanks?event_id=%s" % existing.id)
 
         # Resolve slot to a real UTC datetime.
-        slot_png_local, slot_utc_naive = _resolve_slot_iso(slot_key)
+        available_slot_days = _build_upcoming_slot_days()
+        slot_png_local, slot_utc_naive = _resolve_slot_iso(
+            slot_key, available_slot_days=available_slot_days)
         duration_minutes = DURATION_MINUTES[meeting_type]
         slot_stop_utc_naive = slot_utc_naive + datetime.timedelta(
             minutes=duration_minutes)
@@ -349,8 +442,24 @@ class SteamshipsBookingController(http.Controller):
                     lead_id = None
 
         # Resolve the salesperson user (lead.user_id -> request.env.user -> fallback).
-        salesperson_user = _resolve_salesperson_user(
-            lead, http.request.env)
+        salesperson_user = _resolve_salesperson_user(lead, http.request.env)
+        meeting_label = MEETING_TYPE_LABELS[meeting_type]
+
+        # Public bookings without a valid lead_id still become useful CRM work.
+        if not lead:
+            Lead = http.request.env["crm.lead"].sudo()
+            lead_name = "Website Booking - %s" % company
+            lead = Lead.create({
+                "name": lead_name,
+                "contact_name": name,
+                "email_from": email,
+                "partner_id": partner.id,
+                "description": _build_website_lead_description(
+                    meeting_label, name, email, company, timezone_name,
+                    slot_png_local, duration_minutes, notes),
+                "user_id": salesperson_user.id,
+            })
+            lead_id = lead.id
 
         # Build partner_ids = [client, salesperson.partner_id] (deduped, safe).
         partner_ids = [partner.id]
@@ -358,7 +467,6 @@ class SteamshipsBookingController(http.Controller):
                 salesperson_user.partner_id.id != partner.id):
             partner_ids.append(salesperson_user.partner_id.id)
 
-        meeting_label = MEETING_TYPE_LABELS[meeting_type]
         event_name = "%s — %s" % (
             meeting_label, (company or name or email).strip())
 
@@ -515,10 +623,15 @@ class SteamshipsBookingController(http.Controller):
                     # string labels for the template.
                     start_dt = fields.Datetime.to_datetime(event["start"])
                     stop_dt = fields.Datetime.to_datetime(event["stop"])
-                    png_tz = datetime.timezone(datetime.timedelta(
-                        hours=PNG_TZ_OFFSET_HOURS))
-                    event["start_png"] = start_dt.replace(tzinfo=png_tz)
-                    event["stop_png"] = stop_dt.replace(tzinfo=png_tz)
+                    png_offset = datetime.timedelta(hours=PNG_TZ_OFFSET_HOURS)
+                    # PNG local = UTC + PNG offset. We add the offset to the
+                    # naive UTC datetime, then attach a PNG tzinfo for any
+                    # downstream rendering that wants a real tz-aware object.
+                    png_tz = datetime.timezone(png_offset)
+                    event["start_png"] = (start_dt + png_offset).replace(
+                        tzinfo=png_tz)
+                    event["stop_png"] = (stop_dt + png_offset).replace(
+                        tzinfo=png_tz)
                     # Plain-text label of UTC start for the "Stored (UTC)" row.
                     event["start_utc_label"] = (
                         start_dt.strftime("%Y-%m-%d %H:%M") + " UTC")
@@ -541,6 +654,11 @@ class SteamshipsBookingController(http.Controller):
                                 stop_dt, tz_label)
                         except Exception:  # noqa: BLE001
                             pass
+                    meeting_type_key = event.get("x_steamships_meeting_type")
+                    event["meeting_label"] = MEETING_TYPE_LABELS.get(
+                        meeting_type_key, event.get("name") or "Steamships Meeting")
+                    event["public_summary"] = _extract_public_booking_summary(
+                        event.get("description"))
                     event["google_url"] = _google_calendar_url(event_obj, tz_label)
 
         return http.request.render(

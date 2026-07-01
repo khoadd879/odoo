@@ -48,12 +48,10 @@
             <field name="inherit_id" ref="calendar.view_calendar_event_tree"/>
             <field name="priority">99</field>
             <field name="arch" type="xml">
-                <xpath expr="//tree" position="inside">
+                <xpath expr="//list" position="inside">
                     <field name="x_google_calendar_synced"
                            string="Google Synced"
                            optional="show"
-                           decoration-success="x_google_calendar_synced == True"
-                           decoration-muted="x_google_calendar_synced == False"
                            groups="base.group_user"/>
                 </xpath>
             </field>

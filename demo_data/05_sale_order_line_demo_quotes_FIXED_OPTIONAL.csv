@@ -1,0 +1,12 @@
+id,order_id/id,name,product_id/name,product_uom_qty,price_unit,price_subtotal
+steamships_demo.sol_pacific_fcl_q3_1,steamships_demo.quote_pacific_fcl_quarter,"Container FCL 20ft, Lae -> Port Moresby","Container FCL 20ft, Lae -> Port Moresby",4,4500,18000
+steamships_demo.sol_coral_sea_1,steamships_demo.quote_coral_sea_package,Conference room half-day package,Conference room half-day package,2,950,1900
+steamships_demo.sol_coral_sea_2,steamships_demo.quote_coral_sea_package,Catering package per person,Catering package per person,40,110,4400
+steamships_demo.sol_coral_sea_3,steamships_demo.quote_coral_sea_package,Corporate accommodation per night,Corporate accommodation per night,4,485,1940
+steamships_demo.sol_coral_sea_4,steamships_demo.quote_coral_sea_package,"Office lease per square metre per month","Office lease per square metre per month",30,55,1650
+steamships_demo.sol_coral_sea_5,steamships_demo.quote_coral_sea_package,Warehouse storage per day,Warehouse storage per day,10,45,450
+steamships_demo.sol_coral_sea_6,steamships_demo.quote_coral_sea_package,Container documentation fee,Container documentation fee,2,75,150
+steamships_demo.sol_coral_sea_7,steamships_demo.quote_coral_sea_package,Port handling charge,Port handling charge,2,210,420
+steamships_demo.sol_coral_sea_8,steamships_demo.quote_coral_sea_package,"Retail shop lease per square metre per month","Retail shop lease per square metre per month",5,72,360
+steamships_demo.sol_coral_sea_9,steamships_demo.quote_coral_sea_package,Stevedoring per move,Stevedoring per move,2,185,370
+steamships_demo.sol_coral_sea_10,steamships_demo.quote_coral_sea_package,LCL per cubic metre,LCL per cubic metre,3,380,1140
