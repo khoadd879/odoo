@@ -1,0 +1,27 @@
+# FastAPI + uvicorn
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# Forms / uploads
+python-multipart>=0.0.9
+
+# Pydantic v2
+pydantic==2.9.2
+pydantic-settings>=2.5,<3
+
+# Odoo side calls us with `requests`; we use stdlib for HTTP, but keep
+# requests available for any future outbound calls (mirrors Odoo side).
+requests>=2.32
+
+# RAG
+chromadb==0.5.5
+sentence-transformers==3.1.1
+openai==1.54.0
+
+# OCR — only what we use today (PyMuPDF for PDF raster; PIL for images).
+pymupdf>=1.24,<2.0
+pillow>=10.0
+
+# Tests
+pytest>=8.0
+httpx<0.28

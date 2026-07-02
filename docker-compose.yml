@@ -42,6 +42,11 @@ services:
       MAIL_SMTP_FROM: ${MAIL_SMTP_FROM}
       MAIL_SMTP_FROM_NAME: ${MAIL_SMTP_FROM_NAME}
       GROQ_API_KEY: ${GROQ_API_KEY}
+      # Day 7 split — call the unified AI API
+      RAG_API_BASE: ${RAG_API_BASE:-http://ai-api:9000}
+      OCR_API_BASE: ${OCR_API_BASE:-http://ai-api:9000}
+      AI_API_TOKEN: ${AI_API_TOKEN}
+      RAG_RETRIEVE_TIMEOUT: ${RAG_RETRIEVE_TIMEOUT:-20}
     volumes:
       - ./addons:/mnt/extra-addons/oca
       - ./odoo-data:/var/lib/odoo
@@ -53,32 +58,28 @@ services:
     networks:
       - default
 
-  rag-api:
-    # Day 3 RAG "brain" — ChromaDB + sentence-transformers behind a FastAPI.
-    # See rag/README.md and plans/shiny-mixing-wren.md for context.
+  ai-api:
+    # Day 7 split — stand-alone FastAPI service that powers both RAG and OCR.
+    # Lives in services/steamships-ai-api/. The legacy `rag-api` hostname
+    # still resolves via the network alias below so any older config keeps
+    # working until fully migrated.
     build:
-      context: .
-      dockerfile: rag/Dockerfile
-    container_name: rag_api
-    # Override the baked-in CMD (port 8000) with port 9000 without rebuilding.
-    # Keeps the cached wheel + embedding model from the prior image.
-    # --reload watches /app/app for changes so editing main.py on the host
-    # hot-reloads uvicorn without `docker compose restart` (requires the
-    # source mount below).
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000", "--reload"]
-    # env_file picks up GROQ_API_KEY (and any other secrets) from .env so the
-    # OpenAI-compatible client (Groq) can authenticate. Without this the client
-    # sends an empty Bearer header and Groq returns a 5xx.
+      context: ./services/steamships-ai-api
+      dockerfile: Dockerfile
+    container_name: steamships_ai_api
+    command: ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${AI_API_PORT:-9000} --reload"]
     env_file: .env
     environment:
+      PORT: ${AI_API_PORT:-9000}
+      AI_API_TOKEN: ${AI_API_TOKEN}
       CHROMA_PATH: /data/chroma
       COLLECTION_NAME: steamships_rag
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       DOCS_PATH: /docs/mock/rag_documents
       MANIFEST_PATH: /docs/mock/rag_documents/MANIFEST_ingestion_metadata.json
       CHUNK_SIZE: "800"
       CHUNK_OVERLAP: "100"
       TOP_K: "5"
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-${GROQ_API_KEY}}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.groq.com/openai/v1}
@@ -86,15 +87,15 @@ services:
     volumes:
       - ./chroma_data:/data/chroma
       - ./mock_data:/docs/mock:ro
-      # Mount the source so --reload picks up prompt edits without rebuilding.
-      # __pycache__ is excluded via .dockerignore-ish behaviour: uvicorn ignores
-      # stale .pyc files when source is newer.
-      - ./rag/app:/app/app
+      - ./services/steamships-ai-api/app:/app/app
     ports:
-      - "${RAG_HTTP_PORT:-9000}:9000"
-    restart: unless-stopped
+      - "${AI_API_PORT:-9000}:9000"
     networks:
-      - default
+      default:
+        aliases:
+          - ai-api
+          - rag-api
+    restart: unless-stopped
 
 volumes:
   postgres-data:

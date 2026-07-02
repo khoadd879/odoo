@@ -32,3 +32,10 @@ chroma_data/
 # (steamships_ai module itself is the only thing we commit).
 custom_addons/oca/
 backups/
+
+# Day 7 split — steamships-ai-api uploads + raw documents
+uploads/
+*.pdf
+*.png
+*.jpg
+*.jpeg

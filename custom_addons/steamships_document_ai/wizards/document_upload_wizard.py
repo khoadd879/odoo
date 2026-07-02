@@ -11,7 +11,10 @@ from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_OCR_URL = "http://document-ai:9100"
+# Default to the unified AI API on port 9000. The legacy ``document-ai:9100``
+# hostname still works for the old stand-alone OCR container until that
+# service is folded into ``services/steamships-ai-api``.
+DEFAULT_OCR_URL = "http://ai-api:9000"
 OCR_TIMEOUT_SECONDS = 60
 
 ENDPOINT_MAP = {
@@ -41,7 +44,21 @@ class SteamshipsDocumentUploadWizard(models.TransientModel):
     # OCR endpoint lookup
     # ------------------------------------------------------------------
     def _ocr_base_url(self):
-        return os.environ.get("DOCUMENT_AI_URL", DEFAULT_OCR_URL).rstrip("/") + "/"
+        # ``OCR_API_BASE`` is the unified AI API URL; ``DOCUMENT_AI_URL`` is
+        # kept as a fallback so the legacy ``document-ai:9100`` override
+        # still works during the migration window.
+        return (
+            os.environ.get("OCR_API_BASE")
+            or os.environ.get("DOCUMENT_AI_URL")
+            or DEFAULT_OCR_URL
+        ).rstrip("/") + "/"
+
+    def _ocr_token(self):
+        return (
+            os.environ.get("AI_API_TOKEN")
+            or os.environ.get("OCR_API_TOKEN")
+            or ""
+        ).strip()
 
     def _build_endpoint(self):
         ep = ENDPOINT_MAP.get(self.document_type)
@@ -77,6 +94,9 @@ class SteamshipsDocumentUploadWizard(models.TransientModel):
 
     def _post_file(self, endpoint, filename, content_bytes, mimetype):
         body, headers = self._encode_multipart(filename, content_bytes, mimetype)
+        token = self._ocr_token()
+        if token:
+            headers["X-AI-Token"] = token
         req = urllib.request.Request(
             endpoint,
             data=body,
@@ -87,9 +107,17 @@ class SteamshipsDocumentUploadWizard(models.TransientModel):
             with urllib.request.urlopen(req, timeout=OCR_TIMEOUT_SECONDS) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
+            body_preview = exc.read().decode("utf-8", "replace")[:200] if exc.fp else ""
+            if exc.code == 401:
+                raise UserError(
+                    _(
+                        "OCR service returned HTTP 401. Please check the "
+                        "AI_API_TOKEN env value shared between Odoo and the "
+                        "AI API."
+                    )
+                ) from exc
             raise UserError(
-                _("OCR service returned HTTP %s: %s")
-                % (exc.code, exc.read().decode("utf-8", "replace")[:200])
+                _("OCR service returned HTTP %s: %s") % (exc.code, body_preview)
             ) from exc
         except urllib.error.URLError as exc:
             # URLError wraps timeouts and DNS / connection refused.
@@ -98,7 +126,7 @@ class SteamshipsDocumentUploadWizard(models.TransientModel):
                 raise UserError(_("OCR service timeout. Please try again.")) from exc
             raise UserError(
                 _(
-                    "OCR service is unavailable. Please check document-ai container. "
+                    "OCR service is unavailable. Please check RAG_API_BASE/OCR_API_BASE. "
                     "(%s)"
                 )
                 % (reason or exc)
