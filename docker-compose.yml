@@ -80,8 +80,12 @@ services:
       CHUNK_OVERLAP: "100"
       TOP_K: "5"
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      # OPENAI_API_KEY and GROQ_API_KEY are passed through independently;
+      # app/config.py picks OPENAI_API_KEY first and falls back to GROQ_API_KEY.
+      # Nested interpolation like "${OPENAI_API_KEY:-${GROQ_API_KEY}}" is unsafe
+      # in docker compose, so we keep them separate.
       GROQ_API_KEY: ${GROQ_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-${GROQ_API_KEY}}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.groq.com/openai/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-llama-3.3-70b-versatile}
     volumes:

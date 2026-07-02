@@ -27,6 +27,7 @@ from openai import OpenAI
 from .config import Settings, get_settings
 from .ocr.bill_of_lading import extract_bill_of_lading
 from .ocr.invoice import extract_invoice
+from .ocr.schemas import BillOfLadingResponse, InvoiceResponse
 from .rag.ingest import (
     Chunk,
     build_chunks,
@@ -211,8 +212,25 @@ def ocr_bill_of_lading(
 ):
     """Extract Bill of Lading fields from a PDF/PNG/JPG."""
     content = file.file.read()
-    payload = extract_bill_of_lading(file.filename or "upload.bin", content, file.content_type)
-    return payload.model_dump()
+    try:
+        payload = extract_bill_of_lading(
+            file.filename or "upload.bin", content, file.content_type
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Bill of Lading extraction crashed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "extraction_crashed",
+                "message": "Unexpected server error during OCR. Please try again.",
+            },
+        ) from exc
+
+    if isinstance(payload, BillOfLadingResponse):
+        return payload.model_dump()
+    # Merged extractor returns a dict that already includes the spec
+    # fields + the legacy ``fields`` object. Pass through as-is.
+    return payload
 
 
 @app.post("/api/ocr/invoice")
@@ -223,7 +241,9 @@ def ocr_invoice(
     """Extract supplier-invoice fields. Stub returns ``status=not_implemented``."""
     content = file.file.read()
     payload = extract_invoice(file.filename or "upload.bin", content, file.content_type)
-    return payload.model_dump()
+    if isinstance(payload, InvoiceResponse):
+        return payload.model_dump()
+    return payload
 
 
 # ---------------------------------------------------------------------------

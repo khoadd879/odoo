@@ -155,8 +155,25 @@ class SteamshipsInvoiceOcr(models.Model):
     # Hydration from OCR JSON
     # ------------------------------------------------------------------
     def populate_from_ocr(self, payload, file_content, filename, mimetype):
+        """Create-or-update fields from an OCR JSON payload.
+
+        Accepts BOTH the legacy doc-ai shape (``payload["fields"]["..."]``)
+        AND the new unified steamships-ai-api shape where fields live at
+        the top level.
+        """
         self.ensure_one()
-        fields_map = (payload or {}).get("fields") or {}
+        payload = payload or {}
+        fields_map = dict(payload.get("fields") or {})
+
+        # New spec shape — top-level keys win when present.
+        for key in (
+            "vendor_name", "invoice_number", "invoice_date", "due_date",
+            "currency", "subtotal_amount", "tax_amount", "total_amount",
+            "payment_terms",
+        ):
+            if key in payload and payload[key] not in (None, "", []):
+                fields_map[key] = payload[key]
+
         values = {
             "vendor_name": fields_map.get("vendor_name"),
             "invoice_number": fields_map.get("invoice_number"),

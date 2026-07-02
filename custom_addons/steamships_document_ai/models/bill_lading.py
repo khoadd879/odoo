@@ -195,10 +195,29 @@ class SteamshipsBillLading(models.Model):
     def populate_from_ocr(self, payload, file_content, filename, mimetype):
         """Create-or-update fields from an OCR JSON payload.
 
-        ``payload`` shape mirrors the doc-ai FastAPI contract.
+        Accepts BOTH the legacy doc-ai shape (``payload["fields"]["..."]``)
+        AND the new unified steamships-ai-api shape where fields live at
+        the top level (per the spec: ``bl_number``/``shipper``/.../``date``).
+        The new shape wins when both are present.
         """
         self.ensure_one()
-        fields_map = (payload or {}).get("fields") or {}
+        payload = payload or {}
+        fields_map = dict(payload.get("fields") or {})
+
+        # New spec shape — top-level keys override nested "fields" for the
+        # same name; ``date`` is the spec's name for the B/L document date.
+        for key in (
+            "bl_number", "shipper", "consignee", "notify_party",
+            "vessel_name", "voyage_number", "container_numbers",
+            "port_of_loading", "port_of_discharge", "place_of_acceptance",
+            "place_of_delivery", "cargo_description", "weight", "measurement",
+            "freight_terms", "delivery_agent", "reference_invoice_number",
+        ):
+            if key in payload and payload[key] not in (None, "", []):
+                fields_map[key] = payload[key]
+        if "document_date" not in fields_map and payload.get("date"):
+            fields_map["document_date"] = payload["date"]
+
         values = {
             "bl_number": fields_map.get("bl_number"),
             "shipper": fields_map.get("shipper"),

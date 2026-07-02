@@ -9,8 +9,11 @@ independently on Railway / Render / a VPS, while keeping local
 
 - **RAG retrieve** — `POST /api/retrieve`. Embed a question, query Chroma,
   generate an answer with the configured LLM (Groq by default).
-- **Bill of Lading OCR** — `POST /api/ocr/bill-of-lading`. Stub today; will
-  be merged with `services/document_ai_api` in a follow-up.
+- **Bill of Lading OCR** — `POST /api/ocr/bill-of-lading`. Runs the
+  Tesseract + regex pipeline (merged from the legacy
+  `services/document_ai_api/`). Returns the unified B/L schema at the top
+  level plus the legacy nested `fields` object so the existing Odoo
+  wizard keeps working.
 - **Invoice OCR** — `POST /api/ocr/invoice`. Stub today; returns
   `status: not_implemented`.
 - **Index rebuild** — `POST /api/ingest/rebuild`. Re-build the Chroma

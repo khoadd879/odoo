@@ -64,33 +64,85 @@ curl -X POST http://localhost:9000/api/ocr/bill-of-lading \
 
 ## Deploy notes
 
-### Odoo (OEC)
+The AI API and Odoo are deployed as two independent services. They only
+talk to each other over HTTP, sharing a single `AI_API_TOKEN`.
 
-Set the following env vars on the Odoo app:
+### 1. steamships-ai-api (Railway / Render / Fly.io / VPS)
+
+**Railway**
+
+1. New Project → Deploy from GitHub repo.
+2. **Root Directory:** `services/steamships-ai-api`.
+3. **Dockerfile Path:** `Dockerfile` (auto-detected).
+4. Env vars:
+   ```
+   AI_API_TOKEN=<prod-token>             # generate a long random string
+   GROQ_API_KEY=<your-groq-key>
+   OPENAI_API_KEY=                       # leave empty; GROQ_API_KEY is used
+   OPENAI_BASE_URL=https://api.groq.com/openai/v1
+   OPENAI_MODEL=llama-3.3-70b-versatile
+   CHROMA_PATH=/data/chroma
+   COLLECTION_NAME=steamships_rag
+   DOCS_PATH=/app/mock_data/rag_documents
+   MANIFEST_PATH=/app/mock_data/rag_documents/MANIFEST_ingestion_metadata.json
+   EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+   PRELOAD_EMBEDDING_MODEL=false         # keep false to avoid Railway build OOM
+   ```
+5. Add a Volume mounted at `/data/chroma` (Chroma persistence).
+6. After first deploy, hit the rebuild endpoint once to seed the index:
+   ```bash
+   curl -X POST https://<ai-api-domain>/api/ingest/rebuild \
+     -H "X-AI-Token: <prod-token>" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+   ```
+
+**Render** is the same — Docker Web Service, Root Directory =
+`services/steamships-ai-api`, attach a Disk at `/data/chroma`.
+
+**VPS** is the same Dockerfile with `docker run -p 9000:9000
+--env-file .env -v $PWD/chroma_data:/data/chroma steamships-ai-api`.
+
+### 2. Odoo (OEC / any Odoo 19 host)
+
+Set these env vars on the Odoo app (or via `docker compose`):
 
 ```
-RAG_API_BASE=https://<your-ai-api-domain>
-OCR_API_BASE=https://<your-ai-api-domain>
-AI_API_TOKEN=<same-token-as-ai-api>
+RAG_API_BASE=https://<ai-api-domain>
+OCR_API_BASE=https://<ai-api-domain>
+AI_API_TOKEN=<same-prod-token-as-above>
 RAG_RETRIEVE_TIMEOUT=20
 ```
 
-### steamships-ai-api (Railway / Render / VPS)
+The Odoo addons (`steamships_ai`, `steamships_document_ai`) read these at
+request time. No code change is needed when moving from local dev to OEC —
+just update the env values.
 
-Set:
+### Smoke-test the deployed stack
 
-```
-AI_API_TOKEN=<same-token-as-odoo>
-OPENAI_API_KEY=...        # or GROQ_API_KEY
-OPENAI_BASE_URL=https://api.groq.com/openai/v1
-OPENAI_MODEL=llama-3.3-70b-versatile
-CHROMA_PATH=/data/chroma  # mount a volume here
-COLLECTION_NAME=steamships_rag
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+```bash
+# 1) AI API health (no auth)
+curl https://<ai-api-domain>/health
+
+# 2) RAG retrieve
+curl -X POST https://<ai-api-domain>/api/retrieve \
+  -H "Content-Type: application/json" \
+  -H "X-AI-Token: $AI_API_TOKEN" \
+  -d '{"question":"A client wants to ship a 20ft container from Lae to Port Moresby. What price do I quote?","mode":"staff"}'
+
+# 3) Bill of Lading OCR
+curl -X POST https://<ai-api-domain>/api/ocr/bill-of-lading \
+  -H "X-AI-Token: $AI_API_TOKEN" \
+  -F "file=@sample-bl.pdf"
+
+# 4) Odoo chatbot widget
+# Open https://<odoo-domain>/ask-ai and ask the same shipping question.
+# The widget calls RAG_API_BASE on the Odoo backend, which then proxies
+# to the AI API.
 ```
 
 See the [service README](services/steamships-ai-api/README.md) for
-Railway / Render specifics.
+endpoint reference and troubleshooting.
 
 ## Upgrade a custom module
 
